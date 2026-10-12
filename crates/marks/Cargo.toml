@@ -1,0 +1,15 @@
+[package]
+name = "redwax-marks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64.workspace = true
+directories.workspace = true
+rusqlite.workspace = true
+thiserror.workspace = true
+
+[[bin]]
+name = "redwax-marks"
+path = "src/bin/marks.rs"

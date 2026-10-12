@@ -1,0 +1,36 @@
+//! The TUI, wiring and everything that is not YouTube, mpv or the browser.
+
+pub mod app;
+pub mod art;
+mod browser;
+pub mod browser_login;
+pub mod cli;
+pub mod commands;
+pub mod config;
+pub mod doctor;
+pub mod durations;
+pub mod eq;
+pub mod genre;
+pub mod icons;
+pub mod keys;
+mod likes;
+pub mod lyrics;
+pub mod mpris;
+pub mod onboard;
+pub mod page_cache;
+pub mod palette;
+pub mod playback;
+pub mod prerequisites;
+mod private_file;
+mod radio;
+mod request;
+pub mod screen;
+mod search_editor;
+pub mod services;
+pub mod session;
+pub mod state;
+pub mod sync;
+pub mod terminal;
+pub mod theme;
+pub mod themes;
+pub mod ui;

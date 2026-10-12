@@ -1,0 +1,12 @@
+[Unit]
+Description=redwax live self-test
+After=network-online.target
+
+[Service]
+Type=oneshot
+# The alarm for a YouTube layout change: the walker fails by going quiet, so
+# the counts are asserted nightly rather than noticed a week later.
+ExecStart=@BIN@ doctor --live
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=redwax-doctor

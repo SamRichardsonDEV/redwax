@@ -1,0 +1,35 @@
+{
+"contents": {
+"sectionListRenderer": {
+"contents": [
+{
+"musicDescriptionShelfRenderer": {
+"description": {
+"runs": [
+{
+"text": "Synthetic fixture lyrics\nA second sample line"
+}
+]
+},
+"maxCollapsedLines": 0,
+"maxExpandedLines": 0,
+"onShowCommands": [
+{
+"logLyricEventCommand": {
+"serializedLyricInfo": "CgowMDItODA4MTQxEg90X1RCMjVUeWkwMHk3LTcYASIKMDAyLTgwODE0MQ=="
+}
+}
+],
+"footer": {
+"runs": [
+{
+"text": "Synthetic fixture source"
+}
+]
+}
+}
+}
+]
+}
+}
+}

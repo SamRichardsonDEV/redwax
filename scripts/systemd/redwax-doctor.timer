@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly redwax live self-test
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+# A machine asleep at four still gets its check.
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target

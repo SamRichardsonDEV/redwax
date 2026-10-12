@@ -1,0 +1,31 @@
+name: Bug
+description: Something does not work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `redwax doctor`
+      description: >
+        This names every path, version and check redwax knows about, and is
+        usually enough on its own. It scrubs stream addresses. Look it over
+        before pasting and remove anything you would rather not share.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal and distribution
+      placeholder: Ghostty on Fedora 44
+    validations:
+      required: true

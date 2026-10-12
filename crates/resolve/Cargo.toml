@@ -1,0 +1,23 @@
+[package]
+name = "redwax-resolve"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+redwax-auth.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+url.workspace = true
+reqwest.workspace = true
+sha1.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[[bin]]
+name = "redwax-resolve"
+path = "src/bin/resolve.rs"

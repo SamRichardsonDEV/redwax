@@ -1,0 +1,619 @@
+{
+"contents": {
+"elementRenderer": {
+"newElement": {
+"type": {
+"componentType": {
+"templateConfig": {
+"uriTemplateConfig": {
+"uri": "timed_lyrics.eml-ja|624514fe9192135"
+}
+},
+"model": {
+"timedLyricsModel": {
+"lyricsData": {
+"timedLyricsData": [
+{
+"lyricLine": "Synthetic lyric line 1",
+"cueRange": {
+"startTimeMilliseconds": "0",
+"endTimeMilliseconds": "32800",
+"metadata": {
+"id": "0"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 2",
+"cueRange": {
+"startTimeMilliseconds": "32800",
+"endTimeMilliseconds": "40760",
+"metadata": {
+"id": "1"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 3",
+"cueRange": {
+"startTimeMilliseconds": "40760",
+"endTimeMilliseconds": "48720",
+"metadata": {
+"id": "2"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 4",
+"cueRange": {
+"startTimeMilliseconds": "48720",
+"endTimeMilliseconds": "56720",
+"metadata": {
+"id": "3"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 5",
+"cueRange": {
+"startTimeMilliseconds": "56720",
+"endTimeMilliseconds": "63040",
+"metadata": {
+"id": "4"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 6",
+"cueRange": {
+"startTimeMilliseconds": "63040",
+"endTimeMilliseconds": "65240",
+"metadata": {
+"id": "5"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 7",
+"cueRange": {
+"startTimeMilliseconds": "65240",
+"endTimeMilliseconds": "73290",
+"metadata": {
+"id": "6"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 8",
+"cueRange": {
+"startTimeMilliseconds": "73290",
+"endTimeMilliseconds": "79790",
+"metadata": {
+"id": "7"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 9",
+"cueRange": {
+"startTimeMilliseconds": "79790",
+"endTimeMilliseconds": "87740",
+"metadata": {
+"id": "8"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 10",
+"cueRange": {
+"startTimeMilliseconds": "87740",
+"endTimeMilliseconds": "92980",
+"metadata": {
+"id": "9"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 11",
+"cueRange": {
+"startTimeMilliseconds": "92980",
+"endTimeMilliseconds": "96590",
+"metadata": {
+"id": "10"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 12",
+"cueRange": {
+"startTimeMilliseconds": "96590",
+"endTimeMilliseconds": "98060",
+"metadata": {
+"id": "11"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 13",
+"cueRange": {
+"startTimeMilliseconds": "98060",
+"endTimeMilliseconds": "112470",
+"metadata": {
+"id": "12"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 14",
+"cueRange": {
+"startTimeMilliseconds": "112470",
+"endTimeMilliseconds": "120740",
+"metadata": {
+"id": "13"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 15",
+"cueRange": {
+"startTimeMilliseconds": "120740",
+"endTimeMilliseconds": "128520",
+"metadata": {
+"id": "14"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 16",
+"cueRange": {
+"startTimeMilliseconds": "128520",
+"endTimeMilliseconds": "136790",
+"metadata": {
+"id": "15"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 17",
+"cueRange": {
+"startTimeMilliseconds": "136790",
+"endTimeMilliseconds": "143110",
+"metadata": {
+"id": "16"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 18",
+"cueRange": {
+"startTimeMilliseconds": "143110",
+"endTimeMilliseconds": "145300",
+"metadata": {
+"id": "17"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 19",
+"cueRange": {
+"startTimeMilliseconds": "145300",
+"endTimeMilliseconds": "153300",
+"metadata": {
+"id": "18"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 20",
+"cueRange": {
+"startTimeMilliseconds": "153300",
+"endTimeMilliseconds": "159840",
+"metadata": {
+"id": "19"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 21",
+"cueRange": {
+"startTimeMilliseconds": "159840",
+"endTimeMilliseconds": "167820",
+"metadata": {
+"id": "20"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 22",
+"cueRange": {
+"startTimeMilliseconds": "167820",
+"endTimeMilliseconds": "172970",
+"metadata": {
+"id": "21"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 23",
+"cueRange": {
+"startTimeMilliseconds": "172970",
+"endTimeMilliseconds": "176650",
+"metadata": {
+"id": "22"
+}
+}
+},
+{
+"lyricLine": "Synthetic lyric line 24",
+"cueRange": {
+"startTimeMilliseconds": "176650",
+"endTimeMilliseconds": "178120",
+"metadata": {
+"id": "23"
+}
+}
+}
+],
+"sourceMessage": "Synthetic fixture source",
+"loggingCommand": {
+"logLyricEventCommand": {
+"serializedLyricInfo": "Eg90X1RCMjVUeWkwMHk3LTcYASIKMDAyLTgwODE0MSgCMLHU5Ts="
+}
+},
+"backgroundImage": {
+"sources": [
+{
+"url": "https://yt3.googleusercontent.com/n7pD0VvBb4j8A4eTSQUhZGb2vHEzQJYn-6STRMFMFkoSblJCjxf9eJ7OzTyHRv14RyX9PMbW6HEWkLXU=w544-h544-l90-rj"
+}
+]
+},
+"timedLyricsCommand": {
+"logLyricEventCommand": {
+"serializedLyricInfo": "Eg90X1RCMjVUeWkwMHk3LTcYASIKMDAyLTgwODE0MSgDMLHU5Ts="
+}
+},
+"experiments": {
+"enableAsyncInitController": false,
+"enableLyricLine": false,
+"updatedLyricTimeMs": 0,
+"enableLyricsTextDirectionOverride": false,
+"enableScreenAlwaysOn": false,
+"enableTextWithTranslation": false,
+"enableFixedBackgroundHeight": false,
+"enableLyricsEpSplitView": false,
+"enableTimedLyricsWhileCasting": false,
+"enableLyricsAutoScrollPause": false
+}
+},
+"context": {
+"staticDeviceEnvDataContext": {
+"clientName": "ANDROID_MUSIC",
+"platformName": "PLATFORM_NAME_ANDROID"
+},
+"typographyContext": {},
+"subscriptionsContext": {
+"experiments": {
+"forceModernSubscribeButton": true
+}
+},
+"mainAppContext": {
+"experiments": {
+"enableModernButtons": true,
+"enableRoundedThumbs": true,
+"enableModernChipsV1": true,
+"enableRoundedBadgesForServer": true,
+"enableBuenosAiresListOptionPattern": true,
+"ycEnableUnifiedChannelCreationFlow": true,
+"enableVideoLockupMetadataModernTypeServer": true,
+"collectionThumbnailTransitionDurationSec": 0.8,
+"collectionTextTransitionDurationSec": 0.8,
+"collectionLoopDelayDurationSec": 1.8,
+"fixAndroidMobileHistoryShelfLoadJank": true,
+"enableModernizeStructuredDescriptionPlaylistLockupsV2": true,
+"emlPerfTest": 1,
+"disableTouchFeedbackOnVideoCardsWithoutOnTapCommand": true,
+"enableResponsiveAvatarRowBreakpoint": 840,
+"enableCairoRefresh": true,
+"enableContentsAsElementViewModelForHorizontalShelf": true,
+"enableCairoRefreshRingo2": true,
+"fixViewAllButtonAlignmentInHorizontalShelf": true,
+"enableCairoRefreshTopicIcons": true,
+"enableModernDialog": true,
+"replaceRichGridRowVwcslotsWithVideolockup": true,
+"removeHandleClaimingVideoVwcslots": true,
+"videoLockupUseEnvironmentOrientation": true,
+"reanchorOnVisibleToRootChild": true,
+"enableCaptionsBottomSheetA11yFix": true,
+"enableModernizedBadges": true,
+"enableTextDialogOnTapDismissalDedupe": true,
+"enableElementsToggleButtonIsTogglingDisabled": true,
+"disableVarispeedSliderHapticFeedback": true,
+"enableModernPlayerControlsMetadataUpdate": true,
+"readAriaLabelOnFocus": true,
+"enableLocalThumbnailForVideoUploadLockups": true,
+"showVideoCollaborators": true,
+"useSerialCommandForElementChips": true,
+"enableLocalThumbnailInThumbnailOverlay": true,
+"enableSnappyScrollByDefaultInHorizontalShelf": true,
+"enableA11yFixForThreeDotMenuButton": true,
+"enableScrollableDialogHeaderAndContent": true,
+"enableSingleOnTapCommandVideoLockup": true,
+"enableModernPlayerControlsSeekEdu": true,
+"useOnVisibleCommandOnlyForToggleButtonAutoUpdate": true,
+"enableButtonTextAlignment": true,
+"enableButtonProtoToButtonViewModelMigration": true,
+"removeBasicContentScrollableContainer": true,
+"enableListItemInPlaylistMetadataEditor": true,
+"enableModernPlayerSpeedmasterPadding": true,
+"disableLongPressOnThumbnailForEmptyMenuTapCommand": true,
+"enableCardItemDisabledState": true,
+"enableCenterAlignmentFixForAvatarStack": true,
+"enableTextFieldA11yFix": true,
+"enableSimplifiedSeeYourSubscribersExperiment": true,
+"feedNudgeUseTetrisButtonDimensions": true,
+"enableButtonIconDelhiSize": true,
+"fixContentMetadataImageIncorrectHeightWidthAssignment": true,
+"enableTypographyTokensMigrationMusic": true,
+"enableTwoLinePrivacyTos": true,
+"propagateExperimentsInContextForVideoActionButtons": true,
+"enableThumbnailBadgeContainerA11yLabel": true
+}
+},
+"reelsPlayerContext": {
+"experiments": {
+"updateReelsMetadataInnerPadding": true
+}
+},
+"javascriptContext": {
+"moduleSetVersion": "16608533045712578044"
+},
+"shoppingAppContext": {
+"experiments": {
+"enableProductThumbnailsOverlay3pct": true,
+"enableUnifiedFeaturedProductBanners": true,
+"enableOutOfStockText": true,
+"enableOutOfStockTextAllSurfaces": true,
+"delaySecondsOnCfpRendering": 1,
+"bannerMaxWidthInPortraitWithVisibleControls": 0.7,
+"bannerMaxWidthInLandscapeWithVisibleControls": 0.5,
+"enableMetadataRearrangementForFeaturedProductBanner": true,
+"darkThemeProductThumbnailColor": 4280756007,
+"performOnceProductStickerAnimation": true
+}
+},
+"adsContext": {
+"experimentFlags": {
+"showCarouselOnDwellForVacTravelInfeedDwellDurationMs": 5000,
+"transitionDurationAdSwappingInSec": 0.5,
+"useCellForStoreVisitPanel": true,
+"enableCapabilityOnFlattenedRhsForShortsAds": true,
+"shortsAdLeaveBehindSecondsToInvisible": 0.5,
+"shortsNavigationFadeInDelaySeconds": 0.2,
+"shortsNavigationAnimationDurationSeconds": 0.5,
+"shortsAdLeaveBehindSecondsToAutoDismiss": 10,
+"enableLidaIosFix": true,
+"enableSmallerClickAreaShortsImageAdTooltip": true,
+"enableShortsCompactSurvey": true,
+"shortsCompactSurveyAnimationOutDurationSeconds": 0.4,
+"websiteAutoClickCountdownSeconds": "5",
+"disableShortsImageA11yFocus": true,
+"shiftCtaOverlaySixteenPxFromBottomForShortsAds": true,
+"disableShortsNavigationSelectedBorder": true,
+"enableVerticalPaddingForEngagementFooter": true,
+"enableProductFeedBadgeOnTapCommand": true,
+"enableShortsUxFixForVideoAds": true,
+"adSwappingDismissAdButtonTitle": "dismiss",
+"enableStoreInsetValuesForTopCarousel": true,
+"swapOpenInNewWithArrowDiagonalUpRightOnMobile": true,
+"autoTriggerAdImageTooltipDelayMs": 100000,
+"forceDarkModeForLandscapeEp": true,
+"enableEngagementHeaderBackgroundColorForMusicMobile": true,
+"enableProgressiveDisclosureImageAds": true,
+"enableInfeedSkoverlayRendering": true,
+"largeTextFontSizeOnShortsAds": -1,
+"largeCtaFontSizeOnShortsAds": -1,
+"largeCtaOverlayFontSizeOnShortsAds": -1,
+"dynamicCardHeightOnShortsAds": -1,
+"dynamicCardWidthOnShortsAds": -1,
+"expPanelButtonCenteredCtaNudgeSeconds": 5,
+"emptyLandscapeEpHeader": true,
+"setOverflowButtonEndMarginToZeroForWatchNextFullscreenLandscape": true,
+"enableFixDoublePaddingForImageAds": true,
+"fixSubscribeButtonForWatchNextFullscreenLandscape": true,
+"fixThumbnailSizeForWatchNextFullscreenLandscape": true,
+"fixRightMarginForRve": true,
+"androidLandscapeEpHeightFix": true,
+"expLppProgressiveDisclosureAvatarShrinkTime": 4,
+"expLppProgressiveDisclosureImageZoomTime": 4,
+"expLppProgressiveDisclosureSwipeUpTime": 4,
+"expAppAdsProgressiveDisclosureImageZoomTime": 4,
+"expAppAdsProgressiveDisclosureBkgGradientTime": 4,
+"fixA11yUnlabeledReadoutForAdDisclosureBanner": true,
+"enableReelsAdCardForCreatorPromoFormat": true,
+"enableFixOverlayIconForWatchNextFullscreen": true,
+"enableMyAdCenterHeaderAccessibilityContainer": true,
+"enableFixOverlayIconCompactLandscapeImageOnSearch": true,
+"expShoppingProgressiveDisclosureAvatarShrinkTime": 4,
+"expShoppingProgressiveDisclosureImageZoomTime": 4,
+"enableAdIconTextMinWidthFix": true,
+"fixThumbnailSizeForImageAdsOnWatchNextFullscreenLandscape": true,
+"enableTransparentBorderDualAvatarForPartnershipAds": true,
+"constrainThumbnailDisclosureBannerForAndroidHomeLandscape": true,
+"enableOverlayButtonForTextImage": true,
+"expAdImageKenBurnsAnimationType": "KEN_BURNS_ANIMATION_TYPE_UNSPECIFIED",
+"removeAdBadgeForMusicEpHeader": true,
+"enableResponsiveAdsOnTabletHome": true,
+"enableLongTapForAndroid": true,
+"removeChevronFromAdDisclosureBannerEml": true,
+"expAppAdsProgressiveDisclosureHeaderShrinkTime": 4,
+"enableShortsCompactSurveyFollowUp": true,
+"enableInstreamCompactSurveyNoCompanionZeroHeightFixOnIos": true,
+"enableFixButtonsPositionResponsiveVerticalList": true,
+"enableAdDisclosureBannerOnPlayerOverlay": true,
+"enableIosLandscapeModeVerticalTravelTileModifications": true,
+"enableFixAspectRatioResponsiveGrid": true,
+"enableSwipeUpNudgeRefactor": true,
+"enableShoppingInstreamAdsOnTablet": true,
+"enableLongTapForImageAds": true,
+"enableLongTapForVideoAds": true,
+"enableOneLineDescriptionForShorts": true,
+"hideShoppingPanelOnTabletPortrait": true,
+"fixEpHeaderTablet": true,
+"enableLongTapForThumbnail": true,
+"maxNumberPlaSfs": "2",
+"enableResponsivePositioningAdBadge": true,
+"darkCompanionInLightMode": true,
+"enableClickSourceLoggingForSwipeNudgeEml": true,
+"enableHeadlineTruncationLargeText": true,
+"enableAdButtonGroupWithSitelinksCarousel": true,
+"enableRedesignedAfsSitelinksInnertube": true,
+"enableDescriptionMaxLineForMauiLandscapeOrientation": true,
+"enableGridAdsImageAccessibilityRefactor": true,
+"enableUiFixForGridAds": true,
+"fixLongPressInteractionForDescription": true,
+"enableFeedAdMetadataHeadlineInteractionForResponsiveHeadline": true,
+"enableInstreamCompactSurveyNeutralInfra": true,
+"enableDisplayLandscapeImageWideButtonOnSearchIosTablet": true,
+"enableDisplayLandscapeImageWideButtonOnSearchAndroidTablet": true,
+"enableSwipeUpNudgeClickTargetFix": true,
+"enableDisplayFullWidthSquareImageOnSearchTablet": true,
+"enableDisplayFullWidthPortraitImageOnSearchTablet": true,
+"enableDisplaySquareImageOnSearchTablet": true,
+"enableProgressiveDisclosureForLpp": true,
+"enableVideoAdsOnSearchTablet": true,
+"enableDisplayFullWidthSquareImageCarouselOnSearchTablet": true,
+"enableRevampedSitelinkSingleCardFormat": true,
+"expMainstageEpMargin": 16,
+"enableLandingPagePreviewSaturatedBackground": true,
+"fixLongPressInteractionOnTextElements": true,
+"enableCarouselAndSubscribeButtonWithoutCairo": true,
+"removePaddingFromPanning": true,
+"enableResponsiveTextImageButtonGroup": true,
+"enableResponsiveTextImageButton": true,
+"strongerScrimOverlayForGrid": true,
+"enableFeedAdMetadataHeadlineInteractionForAppendedHeadline": true,
+"expMainstageEpMarginImages": 16,
+"enableCardifiedBasicImmersive": true,
+"enableAiDisclosureForAdImageInnertube": true,
+"enableAiDisclosureForAdTextImageInnertube": true,
+"enablePanelCarouselAdAvatarLockupRtlFix": true,
+"disableShortsImageAdsTooltip": true,
+"enableShortsImageAdDarkScrimFix": true,
+"enableEngagementHeaderFocusableA11yFix": true,
+"enableShortsIosAciBottomScrimFix": true,
+"enableTransparentAiDisclosureAccentColor": true,
+"cardifiedBasicImmersiveSafeZoneHeight": 24,
+"enablePanelCarouselCardPortraitVodResponsiveFix": true
+}
+},
+"channelsContext": {
+"experimentFlags": {
+"enableViewPronounsOnMainApp": true
+}
+},
+"musicContext": {
+"experiments": {
+"enableRadioBuilderCarousel": true,
+"enableLargeRecapHeaderBackgroundImage": true,
+"enableRadioBuilderSearch": true,
+"enableEmlCollectionScalingWithFontScaleAndroid": true,
+"allowMusicListItemFlexGrow": true,
+"enableLibraryEntityQueryInDownloadsBadgeComponent": true,
+"enableHendrixBackgroundColorOnTimedLyricsTab": true,
+"enableDownloadsBadgeQueriesInmemoryLookupOrder": true,
+"enableA11yButtonTraitOnPlaylistsInMusicPlaylistsPickerModel": true,
+"enableShowAndHideMusicThumbnail": true,
+"enableYoutubeLoggingDirectivesMusicListItem": true,
+"enableElcInDownloadButtonComponent": true,
+"enableTimedLyricsOpaqueOnStaticLayout": true,
+"enableListItemA11yScaling": true,
+"enableMusicGridItemModernizationStyleUpdates": true,
+"enableIosNpiSwiftLottieOptimization": true,
+"enablePlaybackProgressModernization": true,
+"musicEnableListItemIndexWidthFix": true,
+"enableCreatePlaylistDialogExpansionFix": true
+}
+}
+},
+"loggingDirectives": {
+"visibility": {
+"types": "12"
+}
+}
+}
+},
+"subscriptionConfig": {
+"dataStoreSubscriptionConfig": {
+"mappings": [
+{
+"identifier": "EiAyZGYyYzgyNmQyMWQ1MzU1N2NhOTZiZGM1NjJmY2E1MiB_KAE%3D",
+"resultField": 1,
+"resultPath": [
+1
+]
+},
+{
+"identifier": "EiBjMThiYWEyMWQwNTVlYTMxNjgzNDkwOTZmZmM2YmI3ZiBOKAE%3D",
+"resultField": 2,
+"resultPath": [
+2
+]
+},
+{
+"identifier": "EipZVE1fUExBWUVSX0NPTE9SX1NBTVBMRV9QQUxFVFRFX0VOVElUWV9LRVkgiwMoAQ%3D%3D",
+"resultField": 7,
+"resultPath": [
+7
+]
+}
+],
+"resultField": 465160965
+},
+"environmentSubscriptionConfig": {
+"resultField": 465160965,
+"environmentDataField": 6,
+"subscription": {
+"environmentDataFilter": [
+"SUBSCRIPTION_WINDOW_SIZE",
+"SUBSCRIPTION_DEVICE_ORIENTATION",
+"SUBSCRIPTION_IS_SCREEN_READER_ACTIVE"
+]
+}
+},
+"controllerSubscriptionConfig": {
+"modelExtension": 465160965,
+"stateField": 3,
+"stateExtension": 465353514,
+"createControllerCommand": {
+"moduleIdentifier": "timed_lyrics_controller|5fd5acac02efeffe",
+"functionName": "createTimedLyricsController|91d5f07a98218013",
+"persistentContextEffect": "PERSISTENT_CONTEXT_EFFECT_NONE",
+"moduleSetVersion": "16608533045712578044"
+},
+"destroyControllerCommand": {
+"moduleIdentifier": "timed_lyrics_controller|5fd5acac02efeffe",
+"functionName": "destroyTimedLyricsController|91d5f07a98218013",
+"persistentContextEffect": "PERSISTENT_CONTEXT_EFFECT_CLEAR",
+"moduleSetVersion": "16608533045712578044"
+},
+"notifyModelUpdateControllerCommand": {
+"moduleIdentifier": "timed_lyrics_controller|5fd5acac02efeffe",
+"functionName": "notifyModelUpdateTimedLyricsController|91d5f07a98218013",
+"persistentContextEffect": "PERSISTENT_CONTEXT_EFFECT_NONE",
+"moduleSetVersion": "16608533045712578044"
+},
+"skipModelUpdates": true
+}
+}
+}
+},
+"properties": {
+"identifierProperties": {
+"identifier": "timed_lyrics.eml-ja|624514fe9192135",
+"uniqueLoggingIdentifier": "1788874326428366554"
+}
+}
+}
+}
+}
+}

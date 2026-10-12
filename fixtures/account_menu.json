@@ -1,0 +1,315 @@
+{
+"actions": [
+{
+"openPopupAction": {
+"popup": {
+"multiPageMenuRenderer": {
+"header": {
+"activeAccountHeaderRenderer": {
+"accountName": {
+"runs": [
+{
+"text": "Test Account"
+}
+]
+},
+"accountPhoto": {
+"thumbnails": [
+{
+"url": "https://example.invalid/avatar.jpg",
+"width": 108,
+"height": 108
+}
+]
+},
+"settingsEndpoint": {
+"applicationSettingsEndpoint": {
+"hack": true
+}
+},
+"manageAccountTitle": {
+"runs": [
+{
+"text": "Manage your Google Account",
+"navigationEndpoint": {
+"urlEndpoint": {
+"url": "https://myaccount.google.com/u/1/b/000000000000000000000/?utm_source=YouTubeWeb&tab=rk&utm_medium=act&gar=WzgwLCIyMzMzODciXQ&sl=true&tab=rk&hl=en",
+"target": "TARGET_NEW_WINDOW"
+}
+}
+}
+]
+},
+"channelHandle": {
+"runs": [
+{
+"text": "@testaccount"
+}
+]
+}
+}
+},
+"sections": [
+{
+"multiPageMenuSectionRenderer": {
+"items": [
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "ACCOUNT_BOX"
+},
+"title": {
+"runs": [
+{
+"text": "Your channel"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "UC0000000000000000000000",
+"canonicalBaseUrl": "/@testaccount",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+}
+}
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "MONETIZATION_ON"
+},
+"title": {
+"runs": [
+{
+"text": "Paid memberships"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "FEmemberships_and_purchases",
+"params": "kgMDmAEK"
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "SWITCH_ACCOUNTS"
+},
+"title": {
+"runs": [
+{
+"text": "Switch account"
+}
+]
+},
+"secondaryIcon": {
+"iconType": "CHEVRON_RIGHT"
+},
+"serviceEndpoint": {
+"getAccountSwitcherEndpoint": {
+"hack": true
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "EXIT_TO_APP"
+},
+"title": {
+"runs": [
+{
+"text": "Sign out"
+}
+]
+},
+"navigationEndpoint": {
+"signOutEndpoint": {
+"hack": true
+}
+}
+}
+}
+]
+}
+},
+{
+"multiPageMenuSectionRenderer": {
+"items": [
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "CLOUD_UPLOAD"
+},
+"title": {
+"runs": [
+{
+"text": "Upload music"
+}
+]
+},
+"serviceEndpoint": {
+"signalServiceEndpoint": {
+"signal": "CLIENT_SIGNAL",
+"actions": [
+{
+"signalAction": {
+"signal": "OPEN_FILE_PICKER"
+}
+}
+]
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "WATCH_HISTORY"
+},
+"title": {
+"runs": [
+{
+"text": "History"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "FEmusic_history"
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "SETTINGS"
+},
+"title": {
+"runs": [
+{
+"text": "Settings"
+}
+]
+},
+"navigationEndpoint": {
+"applicationSettingsEndpoint": {
+"hack": true
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "PRIVACY_INFO"
+},
+"title": {
+"runs": [
+{
+"text": "Terms & privacy policy"
+}
+]
+},
+"navigationEndpoint": {
+"urlEndpoint": {
+"url": "https://www.youtube.com/t/terms?gl=GB&chromeless=1"
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "HELP"
+},
+"title": {
+"runs": [
+{
+"text": "Help"
+}
+]
+},
+"serviceEndpoint": {
+"signalServiceEndpoint": {
+"signal": "CLIENT_SIGNAL",
+"actions": [
+{
+"signalAction": {
+"signal": "HELP"
+}
+}
+]
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "FEEDBACK"
+},
+"title": {
+"runs": [
+{
+"text": "Send feedback"
+}
+]
+},
+"serviceEndpoint": {
+"signalServiceEndpoint": {
+"signal": "CLIENT_SIGNAL",
+"actions": [
+{
+"sendFeedbackAction": {
+"bucket": "Kevlar"
+}
+}
+]
+}
+}
+}
+},
+{
+"compactLinkRenderer": {
+"icon": {
+"iconType": "CANCEL"
+},
+"title": {
+"runs": [
+{
+"text": "Withdraw from contract"
+}
+]
+},
+"navigationEndpoint": {
+"urlEndpoint": {
+"url": "https://support.google.com/youtube/workflow/17112204?hl=en",
+"target": "TARGET_NEW_WINDOW"
+}
+}
+}
+}
+]
+}
+}
+],
+"style": "MULTI_PAGE_MENU_STYLE_TYPE_ACCOUNT"
+}
+},
+"popupType": "DROPDOWN",
+"reusePopup": true
+}
+}
+]
+}

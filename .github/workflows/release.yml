@@ -1,0 +1,164 @@
+name: release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check the release version
+        env:
+          RELEASE_EVENT: ${{ github.event_name }}
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path("Cargo.toml").read_text())["workspace"]["package"]["version"]
+          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+              raise SystemExit("release builds require a stable workspace version")
+          if os.environ["RELEASE_EVENT"] == "push" and os.environ["RELEASE_REF"] != f"v{version}":
+              raise SystemExit("release tag does not match the workspace version")
+          PY
+
+      - name: Install native musl build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools build-essential cmake pkg-config
+
+      - name: Install the toolchain
+        uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
+        with:
+          toolchain: "1.98.0"
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@401aff9a7a08acb9d27b64936a90db81024cff97 # v2.8.2
+        with:
+          key: release-${{ matrix.target }}
+
+      - name: Check packaging regressions
+        run: python3 -m unittest discover -s scripts/tests -p test_package_release.py
+
+      - name: Build static binaries
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+          CC: musl-gcc
+          # Rust's default linker supports the x86_64 static PIE startup.
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+        run: cargo build --locked --release --workspace --target "$RELEASE_TARGET"
+
+      - name: Package and check the release archive
+        env:
+          RELEASE_TARGET: ${{ matrix.target }}
+        run: |
+          python3 scripts/package_release.py --target "$RELEASE_TARGET" --binaries-dir "target/$RELEASE_TARGET/release" --output-dir dist
+          cd dist
+          sha256sum --check "redwax-$RELEASE_TARGET.tar.gz.sha256"
+          mkdir extracted
+          tar -xzf "redwax-$RELEASE_TARGET.tar.gz" -C extracted
+          cd extracted/redwax
+          sha256sum --check SHA256SUMS
+          bash -n install.sh
+          python3 - <<'PY'
+          import subprocess
+          import tomllib
+          from pathlib import Path
+          source = Path("../../..").resolve()
+          version = tomllib.loads((source / "Cargo.toml").read_text())["workspace"]["package"]["version"]
+          actual = subprocess.check_output(["bin/redwax", "--version"], text=True).strip()
+          if actual != f"redwax {version}":
+              raise SystemExit("packaged binary does not match the workspace version")
+          PY
+          install_home="$(mktemp -d)"
+          trap 'rm -rf "$install_home"' EXIT
+          HOME="$install_home" SHELL=/bin/bash REDWAX_BIN_DIR="$install_home/bin" \
+            XDG_CONFIG_HOME="$install_home/config" XDG_DATA_HOME="$install_home/data" \
+            XDG_CACHE_HOME="$install_home/cache" ./install.sh --no-deps
+          python3 ../../../scripts/smoke_install.py "$install_home/bin/redwax"
+
+      - name: Store preview archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: redwax-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  draft:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: redwax-*
+          merge-multiple: true
+          path: dist
+
+      - name: Verify the collected assets
+        run: |
+          cd dist
+          python3 - <<'PY'
+          from pathlib import Path
+          expected = {
+              f"redwax-{target}.tar.gz{suffix}"
+              for target in ("x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl")
+              for suffix in ("", ".sha256")
+          }
+          if {path.name for path in Path(".").iterdir()} != expected:
+              raise SystemExit("release assets are missing or unexpected")
+          PY
+          sha256sum --check *.sha256
+
+      - name: Create a draft for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import urllib.error
+          import urllib.request
+          tag = os.environ["RELEASE_TAG"]
+          if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag):
+              raise SystemExit("invalid release tag")
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GH_REPO']}/releases/tags/{tag}",
+              headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"},
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=30):
+                  raise SystemExit("release already exists, inspect it before changing any assets")
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise SystemExit(f"release lookup failed with HTTP {error.code}")
+          PY
+          gh release create "$RELEASE_TAG" --draft --verify-tag --title "redwax $RELEASE_TAG" --notes "Linux binaries for review. This draft requires manual approval before publication." dist/*.tar.gz dist/*.sha256

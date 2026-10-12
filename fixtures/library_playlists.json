@@ -1,0 +1,4937 @@
+{
+"contents": {
+"singleColumnBrowseResultsRenderer": {
+"tabs": [
+{
+"tabRenderer": {
+"endpoint": {
+"commandExecutorCommand": {
+"commands": [
+{
+"musicLibraryPersistLaunchNavigationCommand": {
+"command": {
+"browseEndpoint": {
+"browseId": "FEmusic_library_landing"
+}
+}
+}
+},
+{
+"browseEndpoint": {
+"browseId": "FEmusic_library_landing",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_LIBRARY_CONTENT_LANDING_PAGE"
+}
+}
+}
+}
+]
+}
+},
+"title": "Library",
+"selected": true,
+"content": {
+"sectionListRenderer": {
+"contents": [
+{
+"gridRenderer": {
+"items": [
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://www.gstatic.com/youtube/media/ytm/images/pbg/create-playlist-@210.png",
+"width": 210,
+"height": 210
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "New playlist",
+"navigationEndpoint": {
+"createPlaylistEndpoint": {
+"params": "CAI%3D",
+"createPlaylistDialog": {
+"createPlaylistDialogRenderer": {
+"dialogTitle": {
+"runs": [
+{
+"text": "New playlist"
+}
+]
+},
+"titlePlaceholder": "Title",
+"privacyOption": {
+"dropdownRenderer": {
+"entries": [
+{
+"dropdownItemRenderer": {
+"label": {
+"runs": [
+{
+"text": "Public"
+}
+]
+},
+"isSelected": true,
+"accessibility": {
+"label": "Public"
+},
+"int32Value": 1,
+"icon": {
+"iconType": "PRIVACY_PUBLIC"
+},
+"descriptionText": {
+"runs": [
+{
+"text": "Anyone can search for and view"
+}
+]
+}
+}
+},
+{
+"dropdownItemRenderer": {
+"label": {
+"runs": [
+{
+"text": "Unlisted"
+}
+]
+},
+"isSelected": false,
+"accessibility": {
+"label": "Unlisted"
+},
+"int32Value": 2,
+"icon": {
+"iconType": "LINK"
+},
+"descriptionText": {
+"runs": [
+{
+"text": "Anyone with the link can view"
+}
+]
+}
+}
+},
+{
+"dropdownItemRenderer": {
+"label": {
+"runs": [
+{
+"text": "Private"
+}
+]
+},
+"isSelected": false,
+"accessibility": {
+"label": "Private"
+},
+"int32Value": 0,
+"icon": {
+"iconType": "LOCK"
+},
+"descriptionText": {
+"runs": [
+{
+"text": "Only you can view"
+}
+]
+}
+}
+}
+],
+"label": "Privacy",
+"accessibility": {
+"label": "Privacy"
+}
+}
+},
+"cancelButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Cancel"
+}
+]
+}
+}
+},
+"createButton": {
+"buttonRenderer": {
+"style": "STYLE_PRIMARY",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Create"
+}
+]
+}
+}
+},
+"playlistCollaborateToggle": {
+"switchListItemViewModel": {
+"title": {
+"content": "Collaborate"
+},
+"isDisabled": false,
+"a11yLabelSwitchedOn": "On",
+"a11yLabelSwitchedOff": "Off"
+}
+},
+"createPlaylistParamsCollaborationEnabled": "KAE%3D",
+"createPlaylistParamsCollaborationDisabled": "KAA%3D",
+"errorMessages": [
+{
+"type": "CREATE_PLAYLIST_DIALOG_FIELD_ERROR_MESSAGE_TYPE_VISIBILITY_INVALID",
+"errorMessage": {
+"runs": [
+{
+"text": "Change privacy to allow collaboration. "
+},
+{
+"text": "Learn\u00a0more",
+"navigationEndpoint": {
+"urlEndpoint": {
+"url": "https://support.google.com/youtubemusic/answer/7205933?nohelpkit=1",
+"target": "TARGET_NEW_WINDOW"
+}
+}
+}
+]
+}
+}
+]
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {},
+"navigationEndpoint": {
+"createPlaylistEndpoint": {
+"params": "CAI%3D",
+"createPlaylistDialog": {
+"createPlaylistDialogRenderer": {
+"dialogTitle": {
+"runs": [
+{
+"text": "New playlist"
+}
+]
+},
+"titlePlaceholder": "Title",
+"privacyOption": {
+"dropdownRenderer": {
+"entries": [
+{
+"dropdownItemRenderer": {
+"label": {
+"runs": [
+{
+"text": "Public"
+}
+]
+},
+"isSelected": true,
+"accessibility": {
+"label": "Public"
+},
+"int32Value": 1,
+"icon": {
+"iconType": "PRIVACY_PUBLIC"
+},
+"descriptionText": {
+"runs": [
+{
+"text": "Anyone can search for and view"
+}
+]
+}
+}
+},
+{
+"dropdownItemRenderer": {
+"label": {
+"runs": [
+{
+"text": "Unlisted"
+}
+]
+},
+"isSelected": false,
+"accessibility": {
+"label": "Unlisted"
+},
+"int32Value": 2,
+"icon": {
+"iconType": "LINK"
+},
+"descriptionText": {
+"runs": [
+{
+"text": "Anyone with the link can view"
+}
+]
+}
+}
+},
+{
+"dropdownItemRenderer": {
+"label": {
+"runs": [
+{
+"text": "Private"
+}
+]
+},
+"isSelected": false,
+"accessibility": {
+"label": "Private"
+},
+"int32Value": 0,
+"icon": {
+"iconType": "LOCK"
+},
+"descriptionText": {
+"runs": [
+{
+"text": "Only you can view"
+}
+]
+}
+}
+}
+],
+"label": "Privacy",
+"accessibility": {
+"label": "Privacy"
+}
+}
+},
+"cancelButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Cancel"
+}
+]
+}
+}
+},
+"createButton": {
+"buttonRenderer": {
+"style": "STYLE_PRIMARY",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Create"
+}
+]
+}
+}
+},
+"playlistCollaborateToggle": {
+"switchListItemViewModel": {
+"title": {
+"content": "Collaborate"
+},
+"isDisabled": false,
+"a11yLabelSwitchedOn": "On",
+"a11yLabelSwitchedOff": "Off"
+}
+},
+"createPlaylistParamsCollaborationEnabled": "KAE%3D",
+"createPlaylistParamsCollaborationDisabled": "KAA%3D",
+"errorMessages": [
+{
+"type": "CREATE_PLAYLIST_DIALOG_FIELD_ERROR_MESSAGE_TYPE_VISIBILITY_INVALID",
+"errorMessage": {
+"runs": [
+{
+"text": "Change privacy to allow collaboration. "
+},
+{
+"text": "Learn\u00a0more",
+"navigationEndpoint": {
+"urlEndpoint": {
+"url": "https://support.google.com/youtubemusic/answer/7205933?nohelpkit=1",
+"target": "TARGET_NEW_WINDOW"
+}
+}
+}
+]
+}
+}
+]
+}
+}
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://www.gstatic.com/youtube/media/ytm/images/pbg/liked-songs-delhi-192.png",
+"width": 192,
+"height": 192
+},
+{
+"url": "https://www.gstatic.com/youtube/media/ytm/images/pbg/liked-songs-delhi-576.png",
+"width": 576,
+"height": 576
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "Liked Music",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLLM",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Auto playlist"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLLM",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "LM",
+"params": "wAEB8gECKAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLLM",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "LM",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "LM"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "LM",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "LM"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "LM",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "LM",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "LM",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play Liked Music"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause Liked Music"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+},
+"subtitleBadges": [
+{
+"musicInlineBadgeRenderer": {
+"icon": {
+"iconType": "KEEP"
+},
+"accessibilityData": {
+"accessibilityData": {
+"label": "Pinned"
+}
+}
+}
+}
+]
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://yt3.googleusercontent.com/lomofKnkXQ3JhDRdkkea8emrVmIS2fqLoSVlAfnQgYUsqfc5cDG8XElLE8ofVARoiYAh_Y8qckM=s192",
+"width": 192,
+"height": 192
+},
+{
+"url": "https://yt3.googleusercontent.com/lomofKnkXQ3JhDRdkkea8emrVmIS2fqLoSVlAfnQgYUsqfc5cDG8XElLE8ofVARoiYAh_Y8qckM=s576",
+"width": 576,
+"height": 576
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "Sam FM",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture600000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Sam",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "UC0000000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+}
+}
+}
+}
+},
+{
+"text": " \u2022 "
+},
+{
+"text": "219 tracks"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture600000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000",
+"params": "wAEB8gECKAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLPLtestfixture600000000000000000000",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Edit playlist"
+}
+]
+},
+"icon": {
+"iconType": "EDIT"
+},
+"navigationEndpoint": {
+"playlistEditorEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture600000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture600000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "PLtestfixture600000000000000000000",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Save to playlist"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_PLAYLIST"
+},
+"navigationEndpoint": {
+"addToPlaylistEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Share"
+}
+]
+},
+"icon": {
+"iconType": "SHARE"
+},
+"navigationEndpoint": {
+"showDialogCommand": {
+"panelLoadingStrategy": {
+"inlineContent": {
+"dialogViewModel": {
+"header": {
+"dialogHeaderViewModel": {
+"headline": {
+"content": "Make your playlist shareable"
+}
+}
+},
+"footer": {
+"panelFooterViewModel": {
+"primaryButton": {
+"buttonViewModel": {
+"title": "Confirm",
+"onTap": {
+"innertubeCommand": {
+"commandExecutorCommand": {
+"commands": [
+{
+"dismissDialogEndpoint": {}
+},
+{
+"webSubmitFormCommand": {
+"formId": "PLtestfixture600000000000000000000"
+}
+}
+]
+}
+}
+},
+"accessibilityText": "Confirm",
+"style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+"isFullWidth": false,
+"type": "BUTTON_VIEW_MODEL_TYPE_FILLED",
+"buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+"state": "BUTTON_VIEW_MODEL_STATE_DISABLED"
+}
+},
+"secondaryButton": {
+"buttonViewModel": {
+"title": "Cancel",
+"onTap": {
+"innertubeCommand": {
+"dismissDialogEndpoint": {}
+}
+},
+"accessibilityText": "Cancel",
+"style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+"isFullWidth": false,
+"type": "BUTTON_VIEW_MODEL_TYPE_OUTLINE",
+"buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT"
+}
+},
+"shouldHideDivider": true
+}
+},
+"content": {
+"radioButtonGroupViewModel": {
+"radioButtons": [
+{
+"radioButtonItemViewModel": {
+"text": "Public",
+"subtext": "Anyone can search for and view",
+"command": {
+"innertubeCommand": {
+"playlistEditEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000",
+"actions": [
+{
+"action": "ACTION_SET_PLAYLIST_PRIVACY",
+"playlistPrivacy": "PUBLIC"
+}
+],
+"params": "EAE4AGoCCAE%3D"
+}
+}
+},
+"customHorizontalPadding": 0
+}
+},
+{
+"radioButtonItemViewModel": {
+"text": "Unlisted",
+"subtext": "Anyone with the link can view",
+"command": {
+"innertubeCommand": {
+"playlistEditEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000",
+"actions": [
+{
+"action": "ACTION_SET_PLAYLIST_PRIVACY",
+"playlistPrivacy": "UNLISTED"
+}
+],
+"params": "EAE4AGoCCAE%3D"
+}
+}
+},
+"customHorizontalPadding": 0
+}
+}
+]
+}
+},
+"formId": "PLtestfixture600000000000000000000"
+}
+}
+},
+"removeDefaultPadding": true
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"icon": {
+"iconType": "DELETE"
+},
+"navigationEndpoint": {
+"confirmDialogEndpoint": {
+"content": {
+"confirmDialogRenderer": {
+"title": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"dialogMessages": [
+{
+"runs": [
+{
+"text": "Are you sure you want to delete this playlist?"
+}
+]
+}
+],
+"confirmButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Delete"
+}
+]
+},
+"serviceEndpoint": {
+"deletePlaylistEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000"
+}
+}
+}
+},
+"cancelButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Cancel"
+}
+]
+}
+}
+}
+}
+}
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture600000000000000000000",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play Sam FM"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause Sam FM"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://yt3.googleusercontent.com/QhyDdMb1k1xRLiCz2vEV7v4z6zjP9w3A4fXU8Zgda7FNQSDBnuyJnTCQaj1DzW48TLuGlFpA5HA=s192",
+"width": 192,
+"height": 192
+},
+{
+"url": "https://yt3.googleusercontent.com/QhyDdMb1k1xRLiCz2vEV7v4z6zjP9w3A4fXU8Zgda7FNQSDBnuyJnTCQaj1DzW48TLuGlFpA5HA=s576",
+"width": 576,
+"height": 576
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "Discord video share with the gang",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture300000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Sam",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "UC0000000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+}
+}
+}
+}
+},
+{
+"text": " \u2022 "
+},
+{
+"text": "16 tracks"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture300000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture300000000000000000000",
+"params": "wAEB8gECKAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLPLtestfixture300000000000000000000",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Edit playlist"
+}
+]
+},
+"icon": {
+"iconType": "EDIT"
+},
+"navigationEndpoint": {
+"playlistEditorEndpoint": {
+"playlistId": "PLtestfixture300000000000000000000"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture300000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture300000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture300000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture300000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "PLtestfixture300000000000000000000",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "PLtestfixture300000000000000000000",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Save to playlist"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_PLAYLIST"
+},
+"navigationEndpoint": {
+"addToPlaylistEndpoint": {
+"playlistId": "PLtestfixture300000000000000000000"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Share"
+}
+]
+},
+"icon": {
+"iconType": "SHARE"
+},
+"navigationEndpoint": {
+"shareEntityEndpoint": {
+"serializedShareEntity": "EiJQTFlrV1NIM2Z0eFlzSndjWUNTZGFVam5peHdoZUJ6ZjQz",
+"sharePanelType": "SHARE_PANEL_TYPE_UNIFIED_SHARE_PANEL"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"icon": {
+"iconType": "DELETE"
+},
+"navigationEndpoint": {
+"confirmDialogEndpoint": {
+"content": {
+"confirmDialogRenderer": {
+"title": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"dialogMessages": [
+{
+"runs": [
+{
+"text": "Are you sure you want to delete this playlist?"
+}
+]
+}
+],
+"confirmButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Delete"
+}
+]
+},
+"serviceEndpoint": {
+"deletePlaylistEndpoint": {
+"playlistId": "PLtestfixture300000000000000000000"
+}
+}
+}
+},
+"cancelButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Cancel"
+}
+]
+}
+}
+}
+}
+}
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture300000000000000000000",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play Discord video share with the gang"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause Discord video share with the gang"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://yt3.googleusercontent.com/EWB1CePiM7hUjZSMyly211lon7DJUoYW4zegAExX00CJ71e4piUgN-cClB6igtqYSy01sWq0GLE=s192",
+"width": 192,
+"height": 192
+},
+{
+"url": "https://yt3.googleusercontent.com/EWB1CePiM7hUjZSMyly211lon7DJUoYW4zegAExX00CJ71e4piUgN-cClB6igtqYSy01sWq0GLE=s576",
+"width": 576,
+"height": 576
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "Deep Work - Zelda",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture100000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Sam",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "UC0000000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+}
+}
+}
+}
+},
+{
+"text": " \u2022 "
+},
+{
+"text": "14 tracks"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture100000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture100000000000000000000",
+"params": "wAEB8gECKAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLPLtestfixture100000000000000000000",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Edit playlist"
+}
+]
+},
+"icon": {
+"iconType": "EDIT"
+},
+"navigationEndpoint": {
+"playlistEditorEndpoint": {
+"playlistId": "PLtestfixture100000000000000000000"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture100000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture100000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture100000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture100000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "PLtestfixture100000000000000000000",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "PLtestfixture100000000000000000000",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Save to playlist"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_PLAYLIST"
+},
+"navigationEndpoint": {
+"addToPlaylistEndpoint": {
+"playlistId": "PLtestfixture100000000000000000000"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Share"
+}
+]
+},
+"icon": {
+"iconType": "SHARE"
+},
+"navigationEndpoint": {
+"shareEntityEndpoint": {
+"serializedShareEntity": "EiJQTFlrV1NIM2Z0eFlzM2VBRnAzQk0zelhYamNiR0hsNmt6",
+"sharePanelType": "SHARE_PANEL_TYPE_UNIFIED_SHARE_PANEL"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"icon": {
+"iconType": "DELETE"
+},
+"navigationEndpoint": {
+"confirmDialogEndpoint": {
+"content": {
+"confirmDialogRenderer": {
+"title": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"dialogMessages": [
+{
+"runs": [
+{
+"text": "Are you sure you want to delete this playlist?"
+}
+]
+}
+],
+"confirmButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Delete"
+}
+]
+},
+"serviceEndpoint": {
+"deletePlaylistEndpoint": {
+"playlistId": "PLtestfixture100000000000000000000"
+}
+}
+}
+},
+"cancelButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Cancel"
+}
+]
+}
+}
+}
+}
+}
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture100000000000000000000",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play Deep Work - Zelda"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause Deep Work - Zelda"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://yt3.googleusercontent.com/ZIuzOp50TRnGjYCMBG-AzfeE674J5ICsiJKT7Gc31NRUnIJPhDN-O-OeVINbHZrWjZoYKx58r93al9Y=w226-h226-l90-rj",
+"width": 226,
+"height": 226
+},
+{
+"url": "https://yt3.googleusercontent.com/ZIuzOp50TRnGjYCMBG-AzfeE674J5ICsiJKT7Gc31NRUnIJPhDN-O-OeVINbHZrWjZoYKx58r93al9Y=w544-h544-l90-rj",
+"width": 544,
+"height": 544
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "Electronic Focus",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLRDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "YouTube Music"
+},
+{
+"text": " \u2022 "
+},
+{
+"text": "137 songs"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLRDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"params": "wAEB8gECGAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLRDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Save playlist to library"
+}
+]
+},
+"defaultIcon": {
+"iconType": "BOOKMARK_BORDER"
+},
+"defaultServiceEndpoint": {
+"likeEndpoint": {
+"status": "LIKE",
+"target": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM"
+}
+}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Remove playlist from library"
+}
+]
+},
+"toggledIcon": {
+"iconType": "BOOKMARK"
+},
+"toggledServiceEndpoint": {
+"likeEndpoint": {
+"status": "INDIFFERENT",
+"target": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM"
+},
+"actions": [
+{
+"hideEnclosingAction": {
+"hack": true
+}
+}
+]
+}
+},
+"isToggled": true
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Save to playlist"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_PLAYLIST"
+},
+"navigationEndpoint": {
+"addToPlaylistEndpoint": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Share"
+}
+]
+},
+"icon": {
+"iconType": "SHARE"
+},
+"navigationEndpoint": {
+"shareEntityEndpoint": {
+"serializedShareEntity": "EitSRENMQUs1dXlfbnZSR1hIcEZ6b244cWJQVFpodW9TcTNXTzRjY1l2bUhN",
+"sharePanelType": "SHARE_PANEL_TYPE_UNIFIED_SHARE_PANEL"
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP_OFF"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDCLAK5uy_nvRGXHpFzon8qbPTZhuoSq3WO4ccYvmHM",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play Electronic Focus"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause Electronic Focus"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://www.gstatic.com/music/listening_review/YEARLY_REVIEW_2024_226x226.png",
+"width": 226,
+"height": 226
+},
+{
+"url": "https://www.gstatic.com/music/listening_review/YEARLY_REVIEW_2024_544x544.png",
+"width": 544,
+"height": 544
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "2024 Recap",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLLRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Made for "
+},
+{
+"text": "Sam",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "UC0000000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+}
+}
+}
+}
+},
+{
+"text": " \u2022 "
+},
+{
+"text": "97 songs"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLLRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"params": "wAEB8gECKAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLLRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Save playlist to library"
+}
+]
+},
+"defaultIcon": {
+"iconType": "BOOKMARK_BORDER"
+},
+"defaultServiceEndpoint": {
+"likeEndpoint": {
+"status": "LIKE",
+"target": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8"
+}
+}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Remove playlist from library"
+}
+]
+},
+"toggledIcon": {
+"iconType": "BOOKMARK"
+},
+"toggledServiceEndpoint": {
+"likeEndpoint": {
+"status": "INDIFFERENT",
+"target": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8"
+},
+"actions": [
+{
+"hideEnclosingAction": {
+"hack": true
+}
+}
+]
+}
+},
+"isToggled": true
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Save to playlist"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_PLAYLIST"
+},
+"navigationEndpoint": {
+"addToPlaylistEndpoint": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Share"
+}
+]
+},
+"icon": {
+"iconType": "SHARE"
+},
+"navigationEndpoint": {
+"showDialogCommand": {
+"panelLoadingStrategy": {
+"inlineContent": {
+"dialogViewModel": {
+"header": {
+"dialogHeaderViewModel": {
+"headline": {
+"content": "Make your playlist shareable"
+}
+}
+},
+"footer": {
+"panelFooterViewModel": {
+"primaryButton": {
+"buttonViewModel": {
+"title": "Confirm",
+"onTap": {
+"innertubeCommand": {
+"commandExecutorCommand": {
+"commands": [
+{
+"dismissDialogEndpoint": {}
+},
+{
+"webSubmitFormCommand": {
+"formId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8"
+}
+}
+]
+}
+}
+},
+"accessibilityText": "Confirm",
+"style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+"isFullWidth": false,
+"type": "BUTTON_VIEW_MODEL_TYPE_FILLED",
+"buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT",
+"state": "BUTTON_VIEW_MODEL_STATE_DISABLED"
+}
+},
+"secondaryButton": {
+"buttonViewModel": {
+"title": "Cancel",
+"onTap": {
+"innertubeCommand": {
+"dismissDialogEndpoint": {}
+}
+},
+"accessibilityText": "Cancel",
+"style": "BUTTON_VIEW_MODEL_STYLE_MONO",
+"isFullWidth": false,
+"type": "BUTTON_VIEW_MODEL_TYPE_OUTLINE",
+"buttonSize": "BUTTON_VIEW_MODEL_SIZE_DEFAULT"
+}
+},
+"shouldHideDivider": true
+}
+},
+"content": {
+"radioButtonGroupViewModel": {
+"radioButtons": [
+{
+"radioButtonItemViewModel": {
+"text": "Public",
+"subtext": "Anyone can search for and view. Your Recap will be saved.",
+"command": {
+"innertubeCommand": {
+"playlistEditEndpoint": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"actions": [
+{
+"action": "ACTION_SET_PLAYLIST_PRIVACY",
+"playlistPrivacy": "PUBLIC"
+},
+{
+"action": "ACTION_SEVER_LISTENING_REVIEW_PLAYLIST_FROM_WATCH_HISTORY"
+}
+],
+"params": "EAE4AGoCCAE%3D"
+}
+}
+},
+"customHorizontalPadding": 0
+}
+},
+{
+"radioButtonItemViewModel": {
+"text": "Unlisted",
+"subtext": "Anyone with the link can view. Your Recap will be saved.",
+"command": {
+"innertubeCommand": {
+"playlistEditEndpoint": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"actions": [
+{
+"action": "ACTION_SET_PLAYLIST_PRIVACY",
+"playlistPrivacy": "UNLISTED"
+},
+{
+"action": "ACTION_SEVER_LISTENING_REVIEW_PLAYLIST_FROM_WATCH_HISTORY"
+}
+],
+"params": "EAE4AGoCCAE%3D"
+}
+}
+},
+"customHorizontalPadding": 0
+}
+}
+]
+}
+},
+"formId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8"
+}
+}
+},
+"removeDefaultPadding": true
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "LRYR92Sw--5ecPNiu0KcM5pb87Pv4o2Z9hAR8",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play 2024 Recap"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause 2024 Recap"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://yt3.googleusercontent.com/nGOuFPniVC6M86TD1fr9m5E9jLN12-anbynDCkaf2p_qayilWIIIpPFEEyDymvqNi30WGbrvKNGL=s192",
+"width": 192,
+"height": 192
+},
+{
+"url": "https://yt3.googleusercontent.com/nGOuFPniVC6M86TD1fr9m5E9jLN12-anbynDCkaf2p_qayilWIIIpPFEEyDymvqNi30WGbrvKNGL=s576",
+"width": 576,
+"height": 576
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "shower time",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture200000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Sam",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "UC0000000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+}
+}
+}
+}
+},
+{
+"text": " \u2022 "
+},
+{
+"text": "3 tracks"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture200000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture200000000000000000000",
+"params": "wAEB8gECKAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLPLtestfixture200000000000000000000",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Edit playlist"
+}
+]
+},
+"icon": {
+"iconType": "EDIT"
+},
+"navigationEndpoint": {
+"playlistEditorEndpoint": {
+"playlistId": "PLtestfixture200000000000000000000"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture200000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture200000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture200000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture200000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "PLtestfixture200000000000000000000",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "PLtestfixture200000000000000000000",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Save to playlist"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_PLAYLIST"
+},
+"navigationEndpoint": {
+"addToPlaylistEndpoint": {
+"playlistId": "PLtestfixture200000000000000000000"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Share"
+}
+]
+},
+"icon": {
+"iconType": "SHARE"
+},
+"navigationEndpoint": {
+"shareEntityEndpoint": {
+"serializedShareEntity": "EiJQTFlrV1NIM2Z0eFlzSTMtb1plelJxTHJ2U0hZeG9ySUFa",
+"sharePanelType": "SHARE_PANEL_TYPE_UNIFIED_SHARE_PANEL"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"icon": {
+"iconType": "DELETE"
+},
+"navigationEndpoint": {
+"confirmDialogEndpoint": {
+"content": {
+"confirmDialogRenderer": {
+"title": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"dialogMessages": [
+{
+"runs": [
+{
+"text": "Are you sure you want to delete this playlist?"
+}
+]
+}
+],
+"confirmButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Delete"
+}
+]
+},
+"serviceEndpoint": {
+"deletePlaylistEndpoint": {
+"playlistId": "PLtestfixture200000000000000000000"
+}
+}
+}
+},
+"cancelButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Cancel"
+}
+]
+}
+}
+}
+}
+}
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture200000000000000000000",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play shower time"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause shower time"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://i.ytimg.com/vi/DwJefiLqgM8/hqdefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCggAEOADGC0guwJIWg&rs=AMzJL3mfewLcUOtHTdhlUHgNVjVxZ_eYeQ",
+"width": 400,
+"height": 225
+},
+{
+"url": "https://i.ytimg.com/vi/DwJefiLqgM8/hq720.jpg?sqp=-oaymwEKCKAGEMIDIABIWg&rs=AMzJL3n6zNJi_1ZAi7O11nc6YmwstE9n4A",
+"width": 800,
+"height": 450
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "Bangerz",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture500000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Sam",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "UC0000000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+}
+}
+}
+}
+},
+{
+"text": " \u2022 "
+},
+{
+"text": "156 tracks"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture500000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture500000000000000000000",
+"params": "wAEB8gECKAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLPLtestfixture500000000000000000000",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Edit playlist"
+}
+]
+},
+"icon": {
+"iconType": "EDIT"
+},
+"navigationEndpoint": {
+"playlistEditorEndpoint": {
+"playlistId": "PLtestfixture500000000000000000000"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture500000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture500000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture500000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture500000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "PLtestfixture500000000000000000000",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "PLtestfixture500000000000000000000",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Save to playlist"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_PLAYLIST"
+},
+"navigationEndpoint": {
+"addToPlaylistEndpoint": {
+"playlistId": "PLtestfixture500000000000000000000"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Share"
+}
+]
+},
+"icon": {
+"iconType": "SHARE"
+},
+"navigationEndpoint": {
+"shareEntityEndpoint": {
+"serializedShareEntity": "EiJQTFlrV1NIM2Z0eFl1c0RMeGlYZ3A5U2h3bk14NXZMWVpi",
+"sharePanelType": "SHARE_PANEL_TYPE_UNIFIED_SHARE_PANEL"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"icon": {
+"iconType": "DELETE"
+},
+"navigationEndpoint": {
+"confirmDialogEndpoint": {
+"content": {
+"confirmDialogRenderer": {
+"title": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"dialogMessages": [
+{
+"runs": [
+{
+"text": "Are you sure you want to delete this playlist?"
+}
+]
+}
+],
+"confirmButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Delete"
+}
+]
+},
+"serviceEndpoint": {
+"deletePlaylistEndpoint": {
+"playlistId": "PLtestfixture500000000000000000000"
+}
+}
+}
+},
+"cancelButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Cancel"
+}
+]
+}
+}
+}
+}
+}
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture500000000000000000000",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play Bangerz"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause Bangerz"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://yt3.googleusercontent.com/XYu4NNZk_bXE5L-SoR0VqYKE3Yr39YHQZ9609uzS7esjzpo5W4bE85C2GqWuOetY8NySf0uunXRg=s192",
+"width": 192,
+"height": 192
+},
+{
+"url": "https://yt3.googleusercontent.com/XYu4NNZk_bXE5L-SoR0VqYKE3Yr39YHQZ9609uzS7esjzpo5W4bE85C2GqWuOetY8NySf0uunXRg=s576",
+"width": 576,
+"height": 576
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "Music",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture400000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Sam",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "UC0000000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_USER_CHANNEL"
+}
+}
+}
+}
+},
+{
+"text": " \u2022 "
+},
+{
+"text": "590 tracks"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLPLtestfixture400000000000000000000",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Shuffle play"
+}
+]
+},
+"icon": {
+"iconType": "MUSIC_SHUFFLE"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture400000000000000000000",
+"params": "wAEB8gECKAE%3D"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Start mix"
+}
+]
+},
+"icon": {
+"iconType": "MIX"
+},
+"navigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "RDAMPLPLtestfixture400000000000000000000",
+"params": "wAEB"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Edit playlist"
+}
+]
+},
+"icon": {
+"iconType": "EDIT"
+},
+"navigationEndpoint": {
+"playlistEditorEndpoint": {
+"playlistId": "PLtestfixture400000000000000000000"
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Play next"
+}
+]
+},
+"icon": {
+"iconType": "QUEUE_PLAY_NEXT"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture400000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture400000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AFTER_CURRENT_VIDEO",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist will play next"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Add to queue"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_REMOTE_QUEUE"
+},
+"serviceEndpoint": {
+"queueAddEndpoint": {
+"queueTarget": {
+"playlistId": "PLtestfixture400000000000000000000",
+"onEmptyQueue": {
+"watchEndpoint": {
+"playlistId": "PLtestfixture400000000000000000000"
+}
+}
+},
+"queueInsertPosition": "INSERT_AT_END",
+"commands": [
+{
+"addToToastAction": {
+"item": {
+"notificationTextRenderer": {
+"successResponseText": {
+"runs": [
+{
+"text": "Playlist added to queue"
+}
+]
+}
+}
+}
+}
+}
+]
+}
+}
+}
+},
+{
+"menuServiceItemDownloadRenderer": {
+"serviceEndpoint": {
+"offlinePlaylistEndpoint": {
+"playlistId": "PLtestfixture400000000000000000000",
+"action": "ACTION_ADD",
+"offlineability": {
+"offlineabilityRenderer": {
+"offlineable": true
+}
+},
+"onAddCommand": {
+"getDownloadActionCommand": {
+"playlistId": "PLtestfixture400000000000000000000",
+"params": "CAI%3D"
+}
+}
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Save to playlist"
+}
+]
+},
+"icon": {
+"iconType": "ADD_TO_PLAYLIST"
+},
+"navigationEndpoint": {
+"addToPlaylistEndpoint": {
+"playlistId": "PLtestfixture400000000000000000000"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Share"
+}
+]
+},
+"icon": {
+"iconType": "SHARE"
+},
+"navigationEndpoint": {
+"shareEntityEndpoint": {
+"serializedShareEntity": "EiJQTFlrV1NIM2Z0eFl1OEg5REgzeEhhWlpxMkQyYW16Y1E2",
+"sharePanelType": "SHARE_PANEL_TYPE_UNIFIED_SHARE_PANEL"
+}
+}
+}
+},
+{
+"menuNavigationItemRenderer": {
+"text": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"icon": {
+"iconType": "DELETE"
+},
+"navigationEndpoint": {
+"confirmDialogEndpoint": {
+"content": {
+"confirmDialogRenderer": {
+"title": {
+"runs": [
+{
+"text": "Delete playlist"
+}
+]
+},
+"dialogMessages": [
+{
+"runs": [
+{
+"text": "Are you sure you want to delete this playlist?"
+}
+]
+}
+],
+"confirmButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Delete"
+}
+]
+},
+"serviceEndpoint": {
+"deletePlaylistEndpoint": {
+"playlistId": "PLtestfixture400000000000000000000"
+}
+}
+}
+},
+"cancelButton": {
+"buttonRenderer": {
+"style": "STYLE_LIGHT_TEXT",
+"size": "SIZE_DEFAULT",
+"isDisabled": false,
+"text": {
+"runs": [
+{
+"text": "Cancel"
+}
+]
+}
+}
+}
+}
+}
+}
+}
+}
+},
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "PLtestfixture400000000000000000000",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play Music"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause Music"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+},
+{
+"musicTwoRowItemRenderer": {
+"thumbnailRenderer": {
+"musicThumbnailRenderer": {
+"thumbnail": {
+"thumbnails": [
+{
+"url": "https://www.gstatic.com/youtube/media/ytm/images/pbg/podcast-queue-delhi-192.png",
+"width": 192,
+"height": 192
+},
+{
+"url": "https://www.gstatic.com/youtube/media/ytm/images/pbg/podcast-queue-delhi-576.png",
+"width": 576,
+"height": 576
+}
+]
+},
+"thumbnailCrop": "MUSIC_THUMBNAIL_CROP_UNSPECIFIED",
+"thumbnailScale": "MUSIC_THUMBNAIL_SCALE_ASPECT_FILL"
+}
+},
+"aspectRatio": "MUSIC_TWO_ROW_ITEM_THUMBNAIL_ASPECT_RATIO_SQUARE",
+"title": {
+"runs": [
+{
+"text": "Episodes for Later",
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLSE",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+}
+}
+]
+},
+"subtitle": {
+"runs": [
+{
+"text": "Your queued episodes"
+}
+]
+},
+"navigationEndpoint": {
+"browseEndpoint": {
+"browseId": "VLSE",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_PLAYLIST"
+}
+}
+}
+},
+"menu": {
+"menuRenderer": {
+"items": [
+{
+"toggleMenuServiceItemRenderer": {
+"defaultText": {
+"runs": [
+{
+"text": "Pin to Listen again"
+}
+]
+},
+"defaultIcon": {
+"iconType": "KEEP"
+},
+"defaultServiceEndpoint": {
+"feedbackEndpoint": {}
+},
+"toggledText": {
+"runs": [
+{
+"text": "Unpin from Listen again"
+}
+]
+},
+"toggledIcon": {
+"iconType": "KEEP_OFF"
+},
+"toggledServiceEndpoint": {
+"feedbackEndpoint": {}
+}
+}
+}
+],
+"accessibility": {
+"accessibilityData": {
+"label": "Action menu"
+}
+}
+}
+},
+"thumbnailOverlay": {
+"musicItemThumbnailOverlayRenderer": {
+"background": {
+"verticalGradient": {
+"gradientLayerColors": [
+"2147483648",
+"0",
+"0"
+]
+}
+},
+"content": {
+"musicPlayButtonRenderer": {
+"playNavigationEndpoint": {
+"watchPlaylistEndpoint": {
+"playlistId": "SE",
+"params": "wAEB"
+}
+},
+"playIcon": {
+"iconType": "PLAY_ARROW"
+},
+"pauseIcon": {
+"iconType": "PAUSE"
+},
+"iconColor": 4294967295,
+"backgroundColor": 2566914048,
+"activeBackgroundColor": 4278190080,
+"loadingIndicatorColor": 14745645,
+"playingIcon": {
+"iconType": "VOLUME_UP"
+},
+"iconLoadingColor": 1308622847,
+"activeScaleFactor": 1.2,
+"buttonSize": "MUSIC_PLAY_BUTTON_SIZE_MEDIUM",
+"rippleTarget": "MUSIC_PLAY_BUTTON_RIPPLE_TARGET_SELF",
+"accessibilityPlayData": {
+"accessibilityData": {
+"label": "Play Episodes for Later"
+}
+},
+"accessibilityPauseData": {
+"accessibilityData": {
+"label": "Pause Episodes for Later"
+}
+}
+}
+},
+"contentPosition": "MUSIC_ITEM_THUMBNAIL_OVERLAY_CONTENT_POSITION_BOTTOM_RIGHT",
+"displayStyle": "MUSIC_ITEM_THUMBNAIL_OVERLAY_DISPLAY_STYLE_HOVER"
+}
+}
+}
+}
+],
+"continuations": [
+{
+"nextContinuationData": {
+"continuation": "fixture-continuation-0001"
+}
+}
+],
+"itemSize": "COLLECTION_STYLE_ITEM_SIZE_SMALL"
+}
+}
+],
+"header": {
+"musicSideAlignedItemRenderer": {
+"startItems": [
+{
+"chipCloudRenderer": {
+"chips": [
+{
+"chipCloudChipRenderer": {
+"navigationEndpoint": {
+"commandExecutorCommand": {
+"commands": [
+{
+"browseEndpoint": {
+"browseId": "FEmusic_library_landing"
+}
+},
+{
+"musicLibraryPersistLaunchNavigationCommand": {
+"command": {
+"browseEndpoint": {
+"browseId": "FEmusic_library_landing"
+}
+}
+}
+}
+]
+}
+},
+"icon": {
+"iconType": "CLOSE"
+},
+"accessibilityData": {
+"accessibilityData": {
+"label": "Clear filters"
+}
+},
+"isSelected": true,
+"onDeselectedCommand": {
+"commandExecutorCommand": {
+"commands": [
+{
+"browseEndpoint": {
+"browseId": "FEmusic_library_landing"
+}
+},
+{
+"musicLibraryPersistLaunchNavigationCommand": {
+"command": {
+"browseEndpoint": {
+"browseId": "FEmusic_library_landing"
+}
+}
+}
+}
+]
+}
+},
+"uniqueId": "Clear filters"
+}
+},
+{
+"chipCloudChipRenderer": {
+"text": {
+"runs": [
+{
+"text": "Playlists"
+}
+]
+},
+"navigationEndpoint": {
+"commandExecutorCommand": {
+"commands": [
+{
+"browseEndpoint": {
+"browseId": "FEmusic_liked_playlists"
+}
+},
+{
+"musicLibraryPersistLaunchNavigationCommand": {
+"command": {
+"browseEndpoint": {
+"browseId": "FEmusic_liked_playlists"
+}
+}
+}
+}
+]
+}
+},
+"accessibilityData": {
+"accessibilityData": {
+"label": "Show playlists"
+}
+},
+"isSelected": true,
+"onDeselectedCommand": {
+"commandExecutorCommand": {
+"commands": [
+{
+"browseEndpoint": {
+"browseId": "FEmusic_library_landing"
+}
+},
+{
+"musicLibraryPersistLaunchNavigationCommand": {
+"command": {
+"browseEndpoint": {
+"browseId": "FEmusic_library_landing"
+}
+}
+}
+}
+]
+}
+},
+"uniqueId": "Playlists"
+}
+}
+]
+}
+}
+],
+"endItems": [
+{
+"musicSortFilterButtonRenderer": {
+"title": {
+"runs": [
+{
+"text": "Recently saved"
+}
+]
+},
+"icon": {
+"iconType": "CHEVRON_DOWN"
+},
+"menu": {
+"musicMultiSelectMenuRenderer": {
+"title": {
+"musicMenuTitleRenderer": {
+"primaryText": {
+"runs": [
+{
+"text": "Sort by"
+}
+]
+}
+}
+},
+"options": [
+{
+"musicMultiSelectMenuItemRenderer": {
+"title": {
+"runs": [
+{
+"text": "Recently saved"
+}
+]
+},
+"selectedCommand": {
+"commandExecutorCommand": {
+"commands": [
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": true
+}
+},
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": false
+}
+},
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": false
+}
+},
+{
+"browseSectionListReloadEndpoint": {
+"continuation": {
+"reloadContinuationData": {
+"continuation": "fixture-continuation-0002",
+"showSpinnerOverlay": true
+}
+}
+}
+}
+]
+}
+},
+"selectedIcon": {
+"iconType": "CHECK"
+},
+"accessibility": {
+"accessibilityData": {
+"label": "Recently saved"
+}
+}
+}
+},
+{
+"musicMultiSelectMenuItemRenderer": {
+"title": {
+"runs": [
+{
+"text": "A to Z"
+}
+]
+},
+"selectedCommand": {
+"commandExecutorCommand": {
+"commands": [
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": false
+}
+},
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": false
+}
+},
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": true
+}
+},
+{
+"browseSectionListReloadEndpoint": {
+"continuation": {
+"reloadContinuationData": {
+"continuation": "fixture-continuation-0003",
+"showSpinnerOverlay": true
+}
+}
+}
+}
+]
+}
+},
+"selectedIcon": {
+"iconType": "CHECK"
+},
+"accessibility": {
+"accessibilityData": {
+"label": "A to Z"
+}
+}
+}
+},
+{
+"musicMultiSelectMenuItemRenderer": {
+"title": {
+"runs": [
+{
+"text": "Z to A"
+}
+]
+},
+"selectedCommand": {
+"commandExecutorCommand": {
+"commands": [
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": false
+}
+},
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": false
+}
+},
+{
+"musicCheckboxFormItemMutatedCommand": {
+"newCheckedState": true
+}
+},
+{
+"browseSectionListReloadEndpoint": {
+"continuation": {
+"reloadContinuationData": {
+"continuation": "fixture-continuation-0004",
+"showSpinnerOverlay": true
+}
+}
+}
+}
+]
+}
+},
+"selectedIcon": {
+"iconType": "CHECK"
+},
+"accessibility": {
+"accessibilityData": {
+"label": "Z to A"
+}
+}
+}
+}
+]
+}
+},
+"accessibility": {
+"accessibilityData": {
+"label": "Sort by - Recently saved selected, dropdown"
+}
+}
+}
+}
+]
+}
+}
+}
+},
+"tabIdentifier": "FEmusic_library_landing"
+}
+},
+{
+"tabRenderer": {
+"endpoint": {
+"commandExecutorCommand": {
+"commands": [
+{
+"musicLibraryPersistLaunchNavigationCommand": {
+"command": {
+"browseEndpoint": {
+"browseId": "FEmusic_offline"
+}
+}
+}
+},
+{
+"browseEndpoint": {
+"browseId": "FEmusic_offline",
+"browseEndpointContextSupportedConfigs": {
+"browseEndpointContextMusicConfig": {
+"pageType": "MUSIC_PAGE_TYPE_DOWNLOADS_CONTENT_LANDING_PAGE"
+}
+}
+}
+}
+]
+}
+},
+"title": "Downloads",
+"selected": false,
+"content": {
+"sectionListRenderer": {
+"continuations": [
+{
+"reloadContinuationData": {
+"continuation": "fixture-continuation-0005"
+}
+}
+]
+}
+},
+"tabIdentifier": "FEmusic_offline"
+}
+}
+]
+}
+}
+}

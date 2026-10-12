@@ -1,0 +1,112 @@
+title = "redwax credentials and browser sessions"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "redwax-google-cookie"
+description = "Google session cookie value"
+regex = '''(?i)(?:SAPISID|APISID|HSID|SSID|SID|LOGIN_INFO|__Secure-[13]P(?:APISID|SID(?:TS|CC)?))["']?\s*[=:]\s*["']?([A-Za-z0-9_./+%-]{16,})'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Synthetic cookie value in the doctor test"
+condition = "AND"
+paths = ['''(?:^|/)(?:1e0915d732fca8db56bdcc47a43739cbe35ee699338a4c22d31c7296819818aa|f40ac94aac00bf364ae4ebef5689f7a2b61d63788030902c529d48d6d7d30ffc)-[a-f0-9]+\.txt$''']
+regexTarget = "secret"
+regexes = ['''^not-a-real-value$''']
+
+[[rules]]
+id = "redwax-netscape-cookie"
+description = "Netscape browser cookie export"
+regex = '''(?m)^\s*(?:#HttpOnly_)?\.?[A-Za-z0-9.-]+\t(?:TRUE|FALSE)\t[^\t\r\n]+\t(?:TRUE|FALSE)\t[0-9]+\t[^\t\r\n]+\t([^\r\n]+)'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Synthetic Netscape cookie value in the doctor test"
+condition = "AND"
+paths = ['''(?:^|/)1e0915d732fca8db56bdcc47a43739cbe35ee699338a4c22d31c7296819818aa-[a-f0-9]+\.txt$''']
+regexTarget = "secret"
+regexes = ['''^not-a-real-value$''']
+
+[[rules]]
+id = "redwax-auth-header"
+description = "Authorization header or signed Google session"
+regex = '''(?i)(?:Bearer\s+([A-Za-z0-9_./+=-]{8,})|Basic\s+([A-Za-z0-9+/]{8,}={0,2})|SAPISID(?:1P|3P)?HASH\s+([0-9]+_[a-f0-9]{40}(?:_u)?))'''
+
+[[rules.allowlists]]
+description = "Deterministic signatures over synthetic cookie test vectors"
+condition = "AND"
+paths = ['''(?:^|/)(?:a16df5407a73a77094aa96c1f981273b8062004ba69a6f13a12796845acf2431|cf023443f9e381e9d4b8b22c95973b3a451557597b8562c1891158af12629d03|f40ac94aac00bf364ae4ebef5689f7a2b61d63788030902c529d48d6d7d30ffc)-[a-f0-9]+\.txt$''']
+regexTarget = "match"
+regexes = [
+  '''^SAPISIDHASH 1700000000_fff3f1c7f1891571ba9c0a66cf1432d4b8de3eb2$''',
+  '''^SAPISID1PHASH 1700000000_59c1bdd52ba359a8150bd6535903a2870cd8a8e4$''',
+  '''^SAPISID3PHASH 1700000000_5e2448d2438680741ddc5cb5023a91cacd06b7a8$''',
+  '''^SAPISIDHASH 1700000000_6d9ba99351596c63d591fcbe89e83bf065809c0c_u$''',
+  '''^SAPISID1PHASH 1700000000_01af9442080adb0794424caa3639bcd0d36410e5_u$''',
+  '''^SAPISID3PHASH 1700000000_dc19465d68772f68d2200bb811adcc0a5cf60162_u$''',
+]
+
+[[rules.allowlists]]
+description = "Deterministic Music signature in the auth session test"
+condition = "AND"
+paths = ['''(?:^|/)480fba484cf7719c13464990959ff35a94b1de8ef9995010ff54010a034c778f-[a-f0-9]+\.txt$''']
+regexTarget = "match"
+regexes = ['''^SAPISIDHASH\ 1700000000_fff3f1c7f1891571ba9c0a66cf1432d4b8de3eb2$''']
+
+[[rules]]
+id = "redwax-cookie-header"
+description = "Literal browser cookie header"
+regex = '''(?im)(?:["'](?:cookie|set-cookie)["']\s*[:=]\s*["']([^"'\r\n]{8,})["']|["'](?:cookie|set-cookie)["']\s*,\s*["']([^"'\r\n]*=[^"'\r\n]{8,})["']|^(?:cookie|set-cookie):[ \t]*([^\r\n]{8,}))'''
+
+[[rules.allowlists]]
+description = "Synthetic cookie headers in auth tests"
+condition = "AND"
+paths = ['''(?:^|/)(?:480fba484cf7719c13464990959ff35a94b1de8ef9995010ff54010a034c778f|81748e713a75275a126aaef92d787b851ab3303e7eaa0b72f01414ab26e9e905)-[a-f0-9]+\.txt$''']
+regexTarget = "match"
+regexes = [
+  '''^"cook[i]e":"SAPISID=secret"$''',
+  '''^"cook[i]e":"SAPISID=secret;\ LOGIN_INFO=private"$''',
+]
+
+[[rules.allowlists]]
+description = "Synthetic cookie headers in parser tests"
+condition = "AND"
+paths = ['''(?:^|/)(?:1e0915d732fca8db56bdcc47a43739cbe35ee699338a4c22d31c7296819818aa|81748e713a75275a126aaef92d787b851ab3303e7eaa0b72f01414ab26e9e905|f40ac94aac00bf364ae4ebef5689f7a2b61d63788030902c529d48d6d7d30ffc)-[a-f0-9]+\.txt$''']
+regexTarget = "match"
+regexes = [
+  '''^"cookie": "SAPISID=not-a-real-value"$''',
+  '''^"cookie":"SAPISID=a; PREF=b"$''',
+]
+
+[[rules]]
+id = "redwax-session-assignment"
+description = "Literal session or account credential"
+regex = '''(?i)["']?(?:access_?token|refresh_?token|id_?token|client_?secret|password|passwd|po_?token|session_?token|session_?id)["']?\s*[:=]\s*["']([A-Za-z0-9_./+=%-]{16,})["']'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Synthetic delegated session in the authentication test"
+condition = "AND"
+paths = ['''(?:^|/)34fa4deec64080e878f3022b25282943169d8d43bb6812c38be510c1fa63a12e-[a-f0-9]+\.txt$''']
+regexTarget = "secret"
+regexes = ['''^explicit-channel$''']
+
+[[rules]]
+id = "redwax-password-assignment"
+description = "Literal password or client secret"
+regex = '''(?i)["']?(?:password|passwd|client_secret)["']?\s*[:=]\s*["']([^"'\r\n]{1,})["']'''
+secretGroup = 1
+
+[[rules]]
+id = "redwax-unquoted-password"
+description = "Unquoted literal password or client secret"
+regex = '''(?im)^\s*(?:password|passwd|client_secret)\s*[:=]\s*([A-Za-z0-9_./+@%=-]{8,})\s*$'''
+secretGroup = 1
+
+[[rules]]
+id = "redwax-url-credential"
+description = "Credential embedded in a URL query"
+regex = '''(?i)(?:[?&]|%3f|%26)(?:access_token|refresh_token|auth_token|api_key|password|pot)(?:=|%3d)([A-Za-z0-9_./+%=-]{16,})'''
+secretGroup = 1

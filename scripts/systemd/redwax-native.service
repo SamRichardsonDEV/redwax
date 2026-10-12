@@ -1,0 +1,13 @@
+[Unit]
+Description=redwax native resolution and latency check
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=@BIN@ --native-canary
+TimeoutStartSec=10s
+KillMode=control-group
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=redwax-native
