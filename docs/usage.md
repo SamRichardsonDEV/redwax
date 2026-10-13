@@ -5,6 +5,10 @@ Every key, every subcommand, every flag and every environment variable.
 
 ## Keys
 
+The Keys panel shows the same two-column hints on every tab. Some actions
+need a selected track, queue entry or editable playlist. Backspace only edits text in fields.
+Space plays, pauses or resumes the saved queue.
+
 The focused list handles keys first. For example, `j` moves its cursor and
 `l` switches tabs when the list has no binding for it.
 
@@ -13,13 +17,12 @@ The focused list handles keys first. For example, `j` moves its cursor and
 | key | action |
 |---|---|
 | `space` | play or pause |
-| `x` | resume current playback |
 | `n` | next track |
 | `p` | previous track |
-| `,` | seek back 5 s |
-| `.` | seek forward 5 s |
-| `<` | seek back 30 s |
-| `>` | seek forward 30 s |
+| `,` | jump back 5 seconds |
+| `.` | jump forward 5 seconds |
+| `<` | jump back 30 seconds |
+| `>` | jump forward 30 seconds |
 | `-` | volume down 5 |
 | `=` | volume up 5 |
 | `m` | mute |
@@ -34,20 +37,19 @@ there. Enter on another queue track starts it from the beginning.
 
 | key | action |
 |---|---|
-| `a` | add the highlighted item to the queue |
-| `A` | play the highlighted item next |
 | `d` | remove the highlighted entry from the queue |
 | `c` | clear the queue |
 | `K` | move the highlighted queue entry up |
 | `J` | move the highlighted queue entry down |
 | `q` | the queue tab, with the cursor on the track that plays |
 | `r` | radio seeded from the highlighted track |
-| `L` | like or unlike the track that plays |
 | `+` | like or unlike the highlighted track |
 | `P` | add the playing song to a playlist, with the highlighted item a `tab` away |
 | `ctrl+p` | add the highlighted item to a playlist |
 | `delete` | remove the highlighted song from the open playlist or queue |
 | `D` | remove the highlighted track from the open playlist, or the track that plays from a playlist you pick |
+
+Right-click a row to add it to the queue. Middle-click a row to play it next.
 
 When redwax restores a song, it opens the queue with that song highlighted.
 Press `enter` to play it. In any tab, press `P` to save the playing song or
@@ -85,9 +87,9 @@ original seed. YouTube availability and a valid session are still required.
 | `j`, `down` | cursor down |
 | `k`, `up` | cursor up |
 | `g g`, `home` | first row |
-| `G`, `end` | last row |
-| `ctrl+d`, `page down` | page down |
-| `ctrl+u`, `page up` | page up |
+| `G` (Shift+G), `end` | last row |
+| `page down` | page down |
+| `page up` | page up |
 | `enter` | open the highlighted item |
 | `{`, `}` | previous or next section |
 | `h`, `left` | previous tab |
@@ -96,9 +98,10 @@ original seed. YouTube availability and a valid session are still required.
 | `/` | find on this page, or focus the remote search box |
 | `ctrl+n`, `ctrl+p` while finding | next or previous match |
 | `f` | filter the current page by result kind |
-| `o` | actions for the highlighted item |
-| `backspace`, `escape` | back |
-| `ctrl+r` | reload the tab |
+| `b` | open the highlighted track album |
+| `escape` | back |
+| `tab` | focus the account box or return to the page |
+| `ctrl+r` | reload the tab or retry failed playback |
 | `e` | show or hide the equaliser panel |
 | `?` | show or hide searchable help |
 | `Q` | quit |
@@ -113,11 +116,27 @@ open, `ctrl+n` and `ctrl+p` wrap through the visible result projection. Plain
 letters, including `n` and `N`, extend the query. Outside that bar, `n` keeps
 its playback meaning and skips to the next track.
 
-Press `o` for actions that apply to the selected or playing item. The same
-menu also provides Retry playback after an automatic restart fails and Sign
-out of YouTube Music. These application actions remain available when the
-current page has no media item. Sign out opens a confirmation with the safe
-choice selected first.
+Press `ctrl+r` to retry playback after an automatic restart fails. The same
+key reloads Home or Library. Sign out is in the account picker and opens a
+confirmation with the safe choice selected first.
+
+### Accounts
+
+The account box at the top right shows the current identity. Press `tab`, then
+`enter` to open the account picker. Use arrows or `j` and `k` to choose an
+identity, then `enter` to switch. Escape closes the picker. You can also reach
+the account box with left or right at the ends of the tab bar.
+
+On startup, Checking login means YouTube has not confirmed the saved session yet.
+Login unconfirmed means that the identity check did not complete. A confirmed
+account name stays visible through temporary errors. Sign in appears after
+logout or a rejected session.
+
+The picker reads the logins in your remembered browser profile. Sign in to
+YouTube Music in that browser, then choose Refresh browser logins if needed.
+Account changes reload Home and Library without restarting playback. A failed
+switch keeps the current login. Changing account on the website alone does
+not switch a running redwax.
 
 ## Subcommands and flags
 
@@ -204,7 +223,9 @@ The selected browser and profile are remembered in `session.json`.
 or configured directory. For Chromium browsers, use a profile such as
 `Default` or `Profile 1`. Quote profile names with spaces.
 
-`--list-accounts` prints the identities YouTube offers for the imported login.
+`--list-accounts` prints the identities YouTube offers for the imported login
+without changing saved credentials. Without `--account`, login follows the
+account selected in the browser.
 `--account` selects a 1-based number from that listing, a handle with or without
 `@`, or an exact name. The selection survives later session refreshes.
 
@@ -229,7 +250,8 @@ in place.
 
 A separate running redwax process keeps the session it has already loaded. Use
 the in-app Sign out action to invalidate credentials in that process and block
-automatic import for the rest of its run, or restart it after the CLI command.
+automatic import until you choose an account again. Restart a running redwax
+after the CLI command.
 The standalone command cannot mark an existing process as signed out. If that
 process later receives a rejected read, session recovery can import from
 the remembered browser again and recreate the exports. `ctrl+r` starts a page read, but it
@@ -457,7 +479,7 @@ panel scrolls itself so that line rests a third of the way down, and an
 instrumental gap shows as the note YouTube sends. A click on a line plays from
 where it starts.
 
-`j` `k` `g` `G` `ctrl+d` `ctrl+u` and the wheel scroll the panel. The panel
+`j`, `k`, `g g`, `G`, Page Up, Page Down and the wheel scroll the panel. The panel
 stops following the track for five seconds after that, then picks it up again.
 
 A track YouTube has only the plain words for keeps the same rule over the same

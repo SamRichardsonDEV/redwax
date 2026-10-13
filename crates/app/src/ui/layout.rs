@@ -55,8 +55,7 @@ pub fn player_mode(width: u16) -> PlayerMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SidebarLayout {
     pub area: Rect,
-    /// Artwork can use only the rows left after track identity, transport, a
-    /// short queue and contextual hints have their minimum allocation.
+    /// Artwork leaves room for track identity, a short queue and key hints.
     pub cover_max_height: u16,
 }
 

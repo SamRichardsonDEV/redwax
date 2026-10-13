@@ -1140,6 +1140,7 @@ impl Setup {
             state_store: redwax::state::PlaybackStateStore::new(self.config.state_path.clone()),
             session_refresh: None,
             session_logout: None,
+            account_access: None,
             config: self.config,
         };
         let deps = match deps.config.transparent {

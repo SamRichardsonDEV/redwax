@@ -81,6 +81,37 @@ impl Transport {
         self.send(endpoint, body, self.context(), headers, None).await
     }
 
+    /// The switcher includes other Google logins that the account menu omits.
+    pub(crate) async fn account_switcher(&self) -> Result<Value> {
+        let response = self
+            .client
+            .get(format!("{YTM_URL}/getAccountSwitcherEndpoint"))
+            .headers(self.headers().await?)
+            .send()
+            .await
+            .map_err(|error| Error::Network(format!("account switcher: {}", kind_of(&error))))?;
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(Error::Rejected);
+        }
+        if !status.is_success() {
+            return Err(Error::Network(format!(
+                "account switcher: HTTP {}",
+                status.as_u16()
+            )));
+        }
+        let body = response
+            .text()
+            .await
+            .map_err(|error| Error::Network(format!("account switcher: {}", kind_of(&error))))?;
+        let body = body
+            .trim_start()
+            .strip_prefix(")]}'")
+            .unwrap_or(body.trim_start());
+        serde_json::from_str(body)
+            .map_err(|_| Error::Network("account switcher: response was not JSON".to_owned()))
+    }
+
     pub(crate) async fn post_continuation(&self, endpoint: &str, body: Value, token: &str) -> Result<Value> {
         let headers = self.headers().await?;
         self.send(endpoint, body, self.context(), headers, Some(token))

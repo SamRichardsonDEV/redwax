@@ -8,11 +8,11 @@
 #[cfg(test)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use std::sync::{Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use redwax_marks::{FirefoxProfile, ProfileCapability, encode_netscape, read_cookies};
-use redwax_ytm::{Account, Session};
+use redwax_ytm::{Account, Client, ClientOptions, MusicSource, Session};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -100,7 +100,30 @@ impl PreparedBrowserSession {
         Ok(())
     }
 
+    /// A valid response is insufficient when YouTube ignored the selected identity.
+    pub fn confirm_account(&self, identity: &str) -> Result<(), String> {
+        if self
+            .account
+            .as_ref()
+            .is_some_and(|account| !account.matches(identity))
+        {
+            return Err(
+                "YouTube returned a different account. Saved credentials were not changed.".to_owned(),
+            );
+        }
+        Ok(())
+    }
+
     pub fn publish(self, config: &Config) -> Result<Session, String> {
+        let previous = RememberedSession::read(&config.session_path);
+        let account_changed = previous
+            .as_ref()
+            .is_none_or(|previous| previous.source != self.source || previous.account != self.account);
+        if account_changed {
+            crate::page_cache::PageCache::new(config.page_cache_dir.clone())
+                .clear()
+                .map_err(|_| "could not clear the previous account page cache".to_owned())?;
+        }
         let browser_export = serde_json::to_vec_pretty(&self.browser_headers)
             .map_err(|_| "could not encode browser credentials".to_owned())?;
         let saved_session = SavedSession {
@@ -119,6 +142,117 @@ impl PreparedBrowserSession {
     }
 }
 
+/// Account changes use fresh browser credentials before replacing the loaded session.
+pub trait AccountAccess: Send + Sync {
+    fn accounts(&self) -> Result<Vec<Account>, String>;
+    fn switch(&self, account: Account) -> Result<String, String>;
+}
+
+pub struct BrowserAccountAccess {
+    config: Config,
+    music_source: Arc<Client>,
+    resolver: Option<redwax_resolve::Resolver>,
+    coordinator: Arc<SessionCoordinator>,
+    runtime: tokio::runtime::Handle,
+    browser_source: Mutex<Option<BrowserSource>>,
+}
+
+impl BrowserAccountAccess {
+    pub fn new(
+        config: Config,
+        music_source: Arc<Client>,
+        resolver: Option<redwax_resolve::Resolver>,
+        coordinator: Arc<SessionCoordinator>,
+    ) -> Self {
+        let browser_source = RememberedSession::read(&config.session_path).map(|saved| saved.source);
+        Self {
+            config,
+            music_source,
+            resolver,
+            coordinator,
+            runtime: tokio::runtime::Handle::current(),
+            browser_source: Mutex::new(browser_source),
+        }
+    }
+
+    fn prepare(&self) -> Result<PreparedBrowserSession, String> {
+        let source = self
+            .browser_source
+            .lock()
+            .map_err(|_| "Browser login is unavailable. Restart redwax.".to_owned())?
+            .clone();
+        let prepared = prepare_from_browser(
+            &self.config,
+            source.as_ref().map(|source| source.browser),
+            source.as_ref().and_then(|source| source.profile.as_deref()),
+        )
+        .map_err(|_| "Could not read browser login. Sign in at music.youtube.com, then retry.".to_owned())?;
+        *self
+            .browser_source
+            .lock()
+            .map_err(|_| "Browser login is unavailable. Restart redwax.".to_owned())? =
+            Some(prepared.source().clone());
+        Ok(prepared)
+    }
+
+    fn client(&self, prepared: &PreparedBrowserSession) -> Client {
+        Client::new(ClientOptions {
+            session: Some(prepared.session().clone()),
+            dump_dir: crate::config::cache_dir().join("dumps"),
+            home_rows: self.config.home_rows,
+        })
+    }
+}
+
+impl AccountAccess for BrowserAccountAccess {
+    fn accounts(&self) -> Result<Vec<Account>, String> {
+        self.coordinator.account_operation(false, || {
+            let prepared = self.prepare()?;
+            self.runtime
+                .block_on(self.client(&prepared).accounts())
+                .map_err(|_| "Could not list accounts. Check your browser login and connection.".to_owned())
+        })
+    }
+
+    fn switch(&self, account: Account) -> Result<String, String> {
+        self.coordinator.account_operation(true, || {
+            let mut prepared = self.prepare()?;
+            let client = self.client(&prepared);
+            let accounts = self.runtime.block_on(client.accounts()).map_err(|_| {
+                "Could not confirm available accounts. Check your browser login and connection.".to_owned()
+            })?;
+            let selected = accounts
+                .iter()
+                .find(|candidate| {
+                    candidate.authuser == account.authuser && candidate.page_id == account.page_id
+                })
+                .ok_or_else(|| "That account is no longer available. Reopen the account list.".to_owned())?;
+            prepared
+                .select_account(selected)
+                .map_err(|_| "Could not select this account. Saved login was not changed.".to_owned())?;
+            client.reload(Some(prepared.session().clone()));
+            let identity = self
+                .runtime
+                .block_on(client.whoami())
+                .map_err(|_| "Could not confirm this account. Saved login was not changed.".to_owned())?
+                .ok_or_else(|| {
+                    "YouTube did not confirm this login. Saved login was not changed.".to_owned()
+                })?;
+            prepared.confirm_account(&identity)?;
+            let session = prepared.publish(&self.config).map_err(|_| {
+                "Could not save this login. Retry or check the redwax configuration directory.".to_owned()
+            })?;
+            if let Some(resolver) = &self.resolver {
+                self.runtime
+                    .block_on(resolver.reload_credentials(Some(session.identity().clone())));
+            }
+            self.music_source.reload(Some(session));
+            Ok(identity)
+        })
+    }
+}
+
+#[derive(Clone)]
 enum RefreshState {
     Idle,
     Running,
@@ -148,6 +282,42 @@ impl SessionCoordinator {
         }
     }
 
+    /// A failed selection preserves logout. Only a confirmed login enables recovery again.
+    fn account_operation<T>(
+        &self,
+        activates_session: bool,
+        operation: impl FnOnce() -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut state = self
+            .refresh_state
+            .lock()
+            .map_err(|_| "Session state is unavailable. Restart redwax.".to_owned())?;
+        while matches!(*state, RefreshState::Running) {
+            state = self
+                .refresh_completed
+                .wait(state)
+                .map_err(|_| "Session state is unavailable. Restart redwax.".to_owned())?;
+        }
+        if matches!(*state, RefreshState::Closed) {
+            return Err("Session recovery is closed.".to_owned());
+        }
+        let previous = std::mem::replace(&mut *state, RefreshState::Running);
+        drop(state);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation))
+            .unwrap_or_else(|_| Err("Account login did not finish. Retry.".to_owned()));
+        let mut state = self
+            .refresh_state
+            .lock()
+            .map_err(|_| "Session state is unavailable. Restart redwax.".to_owned())?;
+        *state = if activates_session && result.is_ok() {
+            RefreshState::Idle
+        } else {
+            previous
+        };
+        self.refresh_completed.notify_all();
+        result
+    }
+
     /// Call on the blocking pool. A failed import is shared with its waiters.
     pub fn refresh(&self) -> Result<(), String> {
         let mut refresh_state = self
@@ -167,7 +337,7 @@ impl SessionCoordinator {
                     operation_result,
                 } if completed_at.elapsed() < self.throttle_window => return operation_result.clone(),
                 RefreshState::SignedOut => {
-                    return Err("Signed out. Run `redwax login` and restart to sign in.".to_owned());
+                    return Err("Signed out. Open the account menu to sign in.".to_owned());
                 }
                 RefreshState::Closed => return Err("session recovery is closed".to_owned()),
                 RefreshState::Idle | RefreshState::Finished { .. } => break,
@@ -652,6 +822,70 @@ mod tests {
     }
 
     #[test]
+    fn listing_accounts_does_not_reenable_a_logged_out_session() {
+        let coordinator = SessionCoordinator::new(Arc::new(|| Ok(())), Duration::ZERO);
+        coordinator.logout(|| Ok(())).unwrap();
+        let accounts = coordinator.account_operation(false, || Ok(vec![test_account()]));
+        assert_eq!(accounts.unwrap(), vec![test_account()]);
+        assert!(coordinator.refresh().is_err());
+    }
+
+    #[test]
+    fn failed_account_selection_preserves_logout_and_success_enables_refresh() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let calls = Arc::new(AtomicUsize::new(0));
+        let imported = calls.clone();
+        let coordinator = SessionCoordinator::new(
+            Arc::new(move || {
+                imported.fetch_add(1, Ordering::Relaxed);
+                Ok(())
+            }),
+            Duration::ZERO,
+        );
+        coordinator.logout(|| Ok(())).unwrap();
+        let failure: Result<(), String> = coordinator.account_operation(true, || Err("fixture".to_owned()));
+        assert!(failure.is_err());
+        assert!(coordinator.refresh().is_err());
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        coordinator.account_operation(true, || Ok(())).unwrap();
+        coordinator.refresh().unwrap();
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn logout_waits_for_an_account_selection() {
+        use std::sync::mpsc;
+        let coordinator = Arc::new(SessionCoordinator::new(Arc::new(|| Ok(())), Duration::ZERO));
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let (entered, started) = mpsc::channel();
+        let (release, released) = mpsc::channel();
+        let selecting = coordinator.clone();
+        let selected = order.clone();
+        let selection = std::thread::spawn(move || {
+            selecting.account_operation(true, || {
+                entered.send(()).unwrap();
+                released.recv().unwrap();
+                selected.lock().unwrap().push("selection");
+                Ok(())
+            })
+        });
+        started.recv().unwrap();
+        let logging_out = coordinator.clone();
+        let logged_out = order.clone();
+        let logout = std::thread::spawn(move || {
+            logging_out.logout(|| {
+                logged_out.lock().unwrap().push("logout");
+                Ok(())
+            })
+        });
+        release.send(()).unwrap();
+        selection.join().unwrap().unwrap();
+        logout.join().unwrap().unwrap();
+        assert_eq!(*order.lock().unwrap(), vec!["selection", "logout"]);
+        assert!(coordinator.refresh().is_err());
+    }
+
+    #[test]
     fn failed_metadata_publish_restores_all_three_previous_exports() {
         let dir = std::env::temp_dir().join(format!("redwax-export-rollback-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -768,6 +1002,27 @@ mod tests {
     }
 
     #[test]
+    fn account_confirmation_rejects_a_different_identity() {
+        let cookies = [test_cookie("SAPISID", "fixture", ".youtube.com")];
+        let mut prepared = prepare_cookie_snapshot(
+            BrowserSource {
+                browser: Browser::Firefox,
+                profile: None,
+            },
+            &cookies,
+            None,
+            &Map::new(),
+        )
+        .unwrap();
+        let mut account = test_account();
+        account.handle = Some("@example-account".to_owned());
+        prepared.select_account(&account).unwrap();
+        assert!(prepared.confirm_account("@example-account").is_ok());
+        assert!(prepared.confirm_account("Test account").is_ok());
+        assert!(prepared.confirm_account("@another-account").is_err());
+    }
+
+    #[test]
     fn preparation_and_selection_leave_exports_unchanged_until_publication() {
         let dir = std::env::temp_dir().join(format!("redwax-session-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -776,6 +1031,7 @@ mod tests {
             auth_path: dir.join("browser.json"),
             cookies_path: dir.join("cookies.txt"),
             session_path: dir.join("session.json"),
+            page_cache_dir: dir.join("pages"),
             ..Config::default()
         };
         for path in [&config.auth_path, &config.cookies_path, &config.session_path] {

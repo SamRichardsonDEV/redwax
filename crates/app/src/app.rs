@@ -22,9 +22,6 @@ use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
 pub use crate::browser::{Browser, BrowserRemoval};
-use crate::commands::{
-    ActionInvocation, ActionMenuContext, ActionSubject, ActionTarget, ActionsMenu, SubjectKind,
-};
 use crate::config::Config;
 use crate::icons::Icons;
 use crate::keys::{Action, action, list_action};
@@ -74,19 +71,21 @@ pub enum Prompt {
 enum PageFocus {
     Browse,
     Search,
+    Account,
 }
 
 enum Overlay {
     Prompt(Prompt),
     Help { filter_focused: bool },
-    Actions(ActionsMenu),
     PlaylistPicker(Box<PlaylistPicker>),
+    Accounts(ui::accounts::AccountPicker),
     Notification(Notification, ui::popup::Scroll),
 }
 
 enum Interaction {
     Browse,
     Search,
+    Account,
     Overlay {
         previous_focus: PageFocus,
         overlay: Box<Overlay>,
@@ -98,6 +97,7 @@ impl Interaction {
         match self {
             Interaction::Browse => PageFocus::Browse,
             Interaction::Search => PageFocus::Search,
+            Interaction::Account => PageFocus::Account,
             Interaction::Overlay { previous_focus, .. } => *previous_focus,
         }
     }
@@ -117,11 +117,12 @@ impl Interaction {
             match previous_focus {
                 PageFocus::Browse => Interaction::Browse,
                 PageFocus::Search => Interaction::Search,
+                PageFocus::Account => Interaction::Account,
             },
         );
         match previous_interaction {
             Interaction::Overlay { overlay, .. } => Some(*overlay),
-            Interaction::Browse | Interaction::Search => None,
+            Interaction::Browse | Interaction::Search | Interaction::Account => None,
         }
     }
 
@@ -129,20 +130,21 @@ impl Interaction {
         *self = match page_focus {
             PageFocus::Browse => Interaction::Browse,
             PageFocus::Search => Interaction::Search,
+            PageFocus::Account => Interaction::Account,
         };
     }
 
     fn overlay(&self) -> Option<&Overlay> {
         match self {
             Interaction::Overlay { overlay, .. } => Some(overlay),
-            Interaction::Browse | Interaction::Search => None,
+            Interaction::Browse | Interaction::Search | Interaction::Account => None,
         }
     }
 
     fn overlay_mut(&mut self) -> Option<&mut Overlay> {
         match self {
             Interaction::Overlay { overlay, .. } => Some(overlay),
-            Interaction::Browse | Interaction::Search => None,
+            Interaction::Browse | Interaction::Search | Interaction::Account => None,
         }
     }
 }
@@ -406,6 +408,14 @@ pub enum AppEvent {
         request: RequestId,
         result: redwax_ytm::Result<Option<String>>,
     },
+    AccountChoices {
+        request: RequestId,
+        result: Result<Vec<redwax_ytm::Account>, String>,
+    },
+    AccountChanged {
+        request: RequestId,
+        result: Result<String, String>,
+    },
     LikeApplied {
         request: LikeRequest,
         error: Option<String>,
@@ -627,6 +637,7 @@ pub struct Deps {
     pub state_store: crate::state::PlaybackStateStore,
     pub session_refresh: Option<SessionRefresh>,
     pub session_logout: Option<SessionLogout>,
+    pub account_access: Option<Arc<dyn crate::session::AccountAccess>>,
 }
 
 /// The art box: the protocol built when an image arrived, and the rows it needs
@@ -639,6 +650,26 @@ pub struct ArtBox {
     pub cover_height: u16,
     pub requested_video_id: Option<String>,
     pub accent_color: Option<Color>,
+}
+
+#[derive(Clone, Copy)]
+enum LoginState {
+    Checking,
+    SignedIn,
+    Unconfirmed,
+    SignedOut,
+}
+
+impl LoginState {
+    fn label(self, identity: &str) -> &str {
+        match self {
+            Self::Checking => "Checking login",
+            Self::SignedIn if !identity.is_empty() => identity,
+            Self::SignedIn => "Signed in",
+            Self::Unconfirmed => "Login unconfirmed",
+            Self::SignedOut => "Sign in",
+        }
+    }
 }
 
 pub struct App<S: MusicSource, P: PlayerControl> {
@@ -656,6 +687,7 @@ pub struct App<S: MusicSource, P: PlayerControl> {
     interaction: Interaction,
     search_editor: SearchEditor,
     pub account: String,
+    login_state: LoginState,
     pub player_state: PlayerState,
     pub lyrics: crate::lyrics::LyricsPane,
     pub liked_overrides: HashMap<String, bool>,
@@ -692,6 +724,8 @@ pub struct App<S: MusicSource, P: PlayerControl> {
     /// is an offset from here, so a jump or a remove has to add it back.
     pub first_queue_index: usize,
     account_request: RequestSlot<bool>,
+    account_choices_request: RequestSlot<()>,
+    account_change_request: RequestSlot<()>,
     session_logged_out: bool,
     /// What each browser last asked for, so a refused fetch can be reissued.
     page_requests: HashMap<Target, RequestSlot<PageFetch>>,
@@ -721,6 +755,28 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         matches!(self.interaction, Interaction::Search)
     }
 
+    pub fn account_focused(&self) -> bool {
+        self.interaction.page_focus() == PageFocus::Account
+    }
+
+    pub fn account_picker_visible(&self) -> bool {
+        self.account_picker().is_some()
+    }
+
+    fn account_picker(&self) -> Option<&ui::accounts::AccountPicker> {
+        match self.interaction.overlay() {
+            Some(Overlay::Accounts(picker)) => Some(picker),
+            _ => None,
+        }
+    }
+
+    fn account_picker_mut(&mut self) -> Option<&mut ui::accounts::AccountPicker> {
+        match self.interaction.overlay_mut() {
+            Some(Overlay::Accounts(picker)) => Some(picker),
+            _ => None,
+        }
+    }
+
     pub fn help_visible(&self) -> bool {
         matches!(self.interaction.overlay(), Some(Overlay::Help { .. }))
     }
@@ -742,20 +798,6 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     fn prompt_mut(&mut self) -> Option<&mut Prompt> {
         match self.interaction.overlay_mut() {
             Some(Overlay::Prompt(prompt)) => Some(prompt),
-            _ => None,
-        }
-    }
-
-    fn actions(&self) -> Option<&ActionsMenu> {
-        match self.interaction.overlay() {
-            Some(Overlay::Actions(actions)) => Some(actions),
-            _ => None,
-        }
-    }
-
-    fn actions_mut(&mut self) -> Option<&mut ActionsMenu> {
-        match self.interaction.overlay_mut() {
-            Some(Overlay::Actions(actions)) => Some(actions),
             _ => None,
         }
     }
@@ -899,6 +941,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             interaction: Interaction::Browse,
             search_editor: SearchEditor::new(deps.config.search_vim_mode),
             account: String::new(),
+            login_state: LoginState::Checking,
             player_state,
             lyrics: crate::lyrics::LyricsPane::default(),
             liked_overrides: HashMap::new(),
@@ -922,6 +965,8 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             themes: None,
             first_queue_index,
             account_request: RequestSlot::default(),
+            account_choices_request: RequestSlot::default(),
+            account_change_request: RequestSlot::default(),
             session_logged_out: false,
             page_requests: HashMap::new(),
             prefetch_requests: HashMap::new(),
@@ -1072,7 +1117,22 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         if self.session_logged_out {
             return;
         }
+        let current_retry = match retry_intent {
+            Some(Retry::Account(request)) => self.account_request.get(request).is_some(),
+            Some(Retry::Page(target, request)) => self
+                .page_requests
+                .get(&target)
+                .is_some_and(|slot| slot.get(request).is_some()),
+            None => true,
+        };
+        if !current_retry {
+            return;
+        }
         if let Some(refresh_error) = refresh_error {
+            if matches!(retry_intent, Some(Retry::Account(_))) {
+                self.account.clear();
+                self.login_state = LoginState::SignedOut;
+            }
             self.notify(
                 format!("{refresh_error}. YouTube rejected the session, run `redwax login`"),
                 Some("Signed out"),
@@ -1083,8 +1143,11 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         self.notify("Session refreshed from firefox", None, Level::Info);
         match retry_intent {
             Some(Retry::Account(request_id)) => self.retry_account(request_id),
-            Some(Retry::Page(target, request_id)) => self.retry_fetch(target, request_id),
-            None => {}
+            Some(Retry::Page(target, request_id)) => {
+                self.retry_fetch(target, request_id);
+                self.start_account();
+            }
+            None => self.start_account(),
         }
     }
 
@@ -1134,6 +1197,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     }
 
     fn start_account_request(&mut self, retry_attempted: bool) {
+        if self.source.signed_in() && self.account.is_empty() {
+            self.login_state = LoginState::Checking;
+        }
         let request_id = self.account_request.begin(retry_attempted);
         let source = self.source.clone();
         let event_sender = self.events.clone();
@@ -1145,6 +1211,190 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             });
         });
         self.account_request.hold(request_id, request_task);
+    }
+
+    fn open_account_picker(&mut self) {
+        self.eq.hide();
+        self.interaction.focus(PageFocus::Account);
+        let signed_in = self.source.signed_in();
+        self.open_overlay(Overlay::Accounts(ui::accounts::AccountPicker::loading(signed_in)));
+        self.load_account_choices();
+    }
+
+    fn load_account_choices(&mut self) {
+        let Some(access) = self.deps.account_access.clone() else {
+            if let Some(picker) = self.account_picker_mut() {
+                picker.status =
+                    ui::accounts::Status::Failed("Browser login is unavailable in this session.".to_owned());
+            }
+            return;
+        };
+        if let Some(picker) = self.account_picker_mut() {
+            picker.status = ui::accounts::Status::Loading;
+        }
+        let request = self.account_choices_request.begin(());
+        let events = self.events.clone();
+        let task = self.background_tasks.spawn(async move {
+            let result = tokio::task::spawn_blocking(move || access.accounts())
+                .await
+                .unwrap_or_else(|_| Err("Browser logins could not be read. Try refreshing.".to_owned()));
+            let _ = events.send(AppEvent::AccountChoices { request, result });
+        });
+        self.account_choices_request.hold(request, task);
+    }
+
+    fn account_picker_key(&mut self, mut key: KeyEvent) {
+        if key.modifiers.contains(KeyModifiers::ALT) {
+            return;
+        }
+        let pending_g = std::mem::take(&mut self.pending_g);
+        if key.code == KeyCode::Char('g') && !key.modifiers.contains(KeyModifiers::CONTROL) {
+            if !pending_g {
+                self.pending_g = true;
+                return;
+            }
+            key.code = KeyCode::Home;
+        }
+        let switching = self
+            .account_picker()
+            .is_some_and(|picker| matches!(picker.status, ui::accounts::Status::Switching));
+        if switching {
+            return;
+        }
+        if key.code == KeyCode::Esc {
+            self.account_choices_request.cancel();
+            self.close_overlay();
+            return;
+        }
+        match list_action(key).or_else(|| action(key)) {
+            Some(Action::CursorDown) => {
+                if let Some(picker) = self.account_picker_mut() {
+                    picker.move_cursor(1);
+                }
+            }
+            Some(Action::CursorUp) => {
+                if let Some(picker) = self.account_picker_mut() {
+                    picker.move_cursor(-1);
+                }
+            }
+            Some(Action::First) => {
+                if let Some(picker) = self.account_picker_mut() {
+                    picker.choose_row(0);
+                }
+            }
+            Some(Action::Last) => {
+                if let Some(picker) = self.account_picker_mut() {
+                    picker.choose_row(usize::MAX);
+                }
+            }
+            Some(Action::PageDown) => {
+                if let Some(picker) = self.account_picker_mut() {
+                    picker.move_cursor(5);
+                }
+            }
+            Some(Action::PageUp) => {
+                if let Some(picker) = self.account_picker_mut() {
+                    picker.move_cursor(-5);
+                }
+            }
+            Some(Action::Open) => self.choose_account_row(),
+            Some(
+                Action::TogglePause
+                | Action::NextTrack
+                | Action::PreviousTrack
+                | Action::Volume(_)
+                | Action::ToggleMute,
+            ) => {
+                if let Some(action) = action(key) {
+                    self.act(action);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn choose_account_row(&mut self) {
+        let Some(picker) = self.account_picker() else {
+            return;
+        };
+        if picker.busy() {
+            return;
+        }
+        if picker.cursor == picker.accounts.len() {
+            self.load_account_choices();
+            return;
+        }
+        if picker.cursor > picker.accounts.len() {
+            self.open_logout_confirmation();
+            return;
+        }
+        let Some(account) = picker.accounts.get(picker.cursor).cloned() else {
+            return;
+        };
+        let Some(access) = self.deps.account_access.clone() else {
+            return;
+        };
+        self.cancel_account_reads();
+        if let Some(picker) = self.account_picker_mut() {
+            picker.status = ui::accounts::Status::Switching;
+        }
+        let request = self.account_change_request.begin(());
+        let events = self.events.clone();
+        let task = self.background_tasks.spawn(async move {
+            let result = tokio::task::spawn_blocking(move || access.switch(account))
+                .await
+                .unwrap_or_else(|_| Err("Account switch did not finish. Try again.".to_owned()));
+            let _ = events.send(AppEvent::AccountChanged { request, result });
+        });
+        self.account_change_request.hold(request, task);
+    }
+
+    fn cancel_account_reads(&mut self) {
+        self.account_request.cancel();
+        for request in self.page_requests.values_mut() {
+            request.cancel();
+        }
+        for request in self.prefetch_requests.values_mut() {
+            request.cancel();
+        }
+        self.page_loaders.clear();
+        self.duration_fill_tasks.clear();
+        self.home.set_busy(false);
+        self.search.set_busy(false);
+        self.library.set_busy(false);
+    }
+
+    fn account_changed(&mut self, identity: String) {
+        self.cancel_account_reads();
+        self.account = identity;
+        self.login_state = LoginState::SignedIn;
+        self.session_logged_out = false;
+        self.liked_overrides.clear();
+        self.like_intents.forget_account();
+        self.home.replace(Page::new("Home", Vec::new()));
+        self.search.replace(Page::new("Search", Vec::new()));
+        self.library.replace(Page::new("Library", Vec::new()));
+        if self.deps.page_cache.clear().is_err() {
+            self.notify(
+                "Old page cache could not be cleared.",
+                Some("Account"),
+                Level::Warning,
+            );
+        }
+        self.close_overlay();
+        self.interaction.focus(PageFocus::Browse);
+        self.notify(
+            format!("Signed in as {}", self.account),
+            Some("Account"),
+            Level::Info,
+        );
+        self.load_page(Target::Home, Some("home".to_owned()), true);
+        self.load_page(Target::Library, Some("library".to_owned()), true);
+        if !self.search_query.trim().is_empty() {
+            let query = self.search_query.trim().to_owned();
+            let key = crate::page_cache::search_key(&query);
+            self.fetch(Target::Search, Fetch::Search(query), Some(key), true);
+        }
     }
 
     /// The rice can switch themes while redwax runs, so the palette is read
@@ -1213,6 +1463,10 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     pub fn handle_key(&mut self, key_event: KeyEvent) {
         self.screen.touch();
         self.last_input_millis = clock();
+        if self.account_picker_visible() {
+            self.account_picker_key(key_event);
+            return;
+        }
         if let Some((_, notification_scroll)) = self.notification_popup_mut() {
             match key_event.code {
                 KeyCode::Esc | KeyCode::Enter | KeyCode::Char('!') => {
@@ -1222,10 +1476,6 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     notification_scroll.key(key_event.code);
                 }
             }
-            return;
-        }
-        if self.actions().is_some() {
-            self.actions_key(key_event);
             return;
         }
         // The picker swallows keys that would otherwise reach the covered page.
@@ -1263,6 +1513,18 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             match pending_g_was_set {
                 true => self.act(Action::First),
                 false => self.pending_g = true,
+            }
+            return;
+        }
+        if self.account_focused() {
+            if let Some(decoded_action) = list_action(key_event).or_else(|| action(key_event)) {
+                match decoded_action {
+                    Action::Open => self.open_account_picker(),
+                    Action::CursorDown | Action::CursorUp | Action::Back => {
+                        self.interaction.focus(PageFocus::Browse);
+                    }
+                    action => self.act(action),
+                }
             }
             return;
         }
@@ -1327,40 +1589,6 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     /// A resize invalidates any pointer gesture measured against the old frame.
     pub fn resized(&mut self) {
         self.scrub = None;
-        self.screen.touch();
-    }
-
-    fn actions_key(&mut self, key_event: KeyEvent) {
-        if key_event.modifiers.contains(KeyModifiers::CONTROL) {
-            return;
-        }
-        match key_event.code {
-            KeyCode::Char('j') | KeyCode::Down => {
-                if let Some(actions_menu) = self.actions_mut() {
-                    actions_menu.move_cursor(1);
-                }
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
-                if let Some(actions_menu) = self.actions_mut() {
-                    actions_menu.move_cursor(-1);
-                }
-            }
-            KeyCode::Char('h') | KeyCode::Left => {
-                if let Some(actions_menu) = self.actions_mut() {
-                    actions_menu.choose_subject(-1);
-                }
-            }
-            KeyCode::Char('l') | KeyCode::Right | KeyCode::Tab => {
-                if let Some(actions_menu) = self.actions_mut() {
-                    actions_menu.choose_subject(1);
-                }
-            }
-            KeyCode::Enter => self.invoke_selected_action(),
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('o') => {
-                self.close_overlay();
-            }
-            _ => {}
-        }
         self.screen.touch();
     }
 
@@ -1645,7 +1873,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         if self.modal_pointer_owner()
             && !matches!(
                 &pointer_intent,
-                PointerIntent::Hit(Hit::Overlay | Hit::ActionRow(_) | Hit::Confirmation(_))
+                PointerIntent::Hit(Hit::Overlay | Hit::AccountRow(_) | Hit::Confirmation(_))
             )
         {
             return;
@@ -1731,6 +1959,13 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             Hit::Row(row_target) => self.click_row(row_target, Click::Open),
             Hit::Notification(notification_index) => self.read_notification(Some(notification_index)),
             Hit::Tab(tab) => self.switch_tab(tab),
+            Hit::Account => self.open_account_picker(),
+            Hit::AccountRow(row) => {
+                if let Some(picker) = self.account_picker_mut() {
+                    picker.choose_row(row);
+                }
+                self.choose_account_row();
+            }
             Hit::KeyHint(action) => self.act(action),
             Hit::SeekBar(_) | Hit::Volume(_) | Hit::EqBand(_, _) => {}
             Hit::Shuffle => self.toggle_shuffle(),
@@ -1757,13 +1992,6 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             Hit::ThemeRow(row) => {
                 self.themes_cursor(ThemesMove::To(row));
                 self.keep_theme();
-            }
-            Hit::ActionRow(action_row_index) => {
-                if let Some(actions_menu) = self.actions_mut() {
-                    let cursor_delta = action_row_index as isize - actions_menu.cursor() as isize;
-                    actions_menu.move_cursor(cursor_delta);
-                }
-                self.invoke_selected_action();
             }
             Hit::Confirmation(choice) => {
                 if let Some(confirmation_state) = self.confirmation_state_mut() {
@@ -1809,6 +2037,8 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         if self.modal_pointer_owner() {
             if self.help_visible() {
                 self.help_scroll.move_by(row_delta);
+            } else if let Some(picker) = self.account_picker_mut() {
+                picker.move_cursor(row_delta);
             }
             return;
         }
@@ -1848,8 +2078,8 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             self.interaction.overlay(),
             Some(
                 Overlay::Help { .. }
-                    | Overlay::Actions(_)
                     | Overlay::PlaylistPicker(_)
+                    | Overlay::Accounts(_)
                     | Overlay::Prompt(Prompt::ClearQueue(_) | Prompt::Logout(_))
             )
         )
@@ -1900,7 +2130,6 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     self.command(|player| async move { player.toggle_pause().await });
                 }
             }
-            Action::Play => self.play_current(),
             Action::NextTrack => self.command(|player| async move { player.next().await }),
             Action::PreviousTrack => self.command(|player| async move { player.previous().await }),
             Action::Seek(seconds) => {
@@ -1916,10 +2145,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     self.player_state.volume.to_string(),
                 )));
             }
-            Action::AddToQueue => self.queue_highlighted(false),
-            Action::PlayNext => self.queue_highlighted(true),
             Action::Radio => self.radio(),
-            Action::Like => self.like(self.player_state.track().cloned(), "Nothing is playing"),
             Action::LikeHighlighted => {
                 self.like(self.highlighted_track().cloned(), "Highlight a track to like it")
             }
@@ -1944,13 +2170,23 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             Action::ClearQueue => {
                 self.open_clear_confirmation();
             }
-            Action::PreviousTab => self.switch_tab(self.tab.previous()),
-            Action::NextTab => self.switch_tab(self.tab.next()),
+            Action::PreviousTab => self.navigate_header(false),
+            Action::NextTab => self.navigate_header(true),
             Action::SwitchTab(tab) => self.switch_tab(tab),
             Action::FindOnPage => match self.tab {
                 Tab::Search => self.focus_search(),
                 _ => self.open_find(),
             },
+            Action::FocusAccount => {
+                self.eq.hide();
+                let focus = if self.account_focused() {
+                    PageFocus::Browse
+                } else {
+                    PageFocus::Account
+                };
+                self.interaction.focus(focus);
+            }
+            Action::OpenAccount => self.open_account_picker(),
             Action::PreviousSection => self.jump_section(false),
             Action::NextSection => self.jump_section(true),
             Action::Back => self.back(),
@@ -1983,30 +2219,14 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             Action::PageDown => self.move_cursor(self.screen.visible_rows().max(1) as isize),
             Action::PageUp => self.move_cursor(-(self.screen.visible_rows().max(1) as isize)),
             Action::Open => self.open_selected(),
-            Action::OpenActions => self.open_actions(),
-            Action::OpenAlbum => self.open_album(ActionTarget::Selected),
+            Action::OpenAlbum => self.open_album(),
             Action::CycleFilter => {
                 if let Some(browser) = self.active_browser_mut() {
                     browser.cycle_filter(true);
                     self.arm_rest();
                 }
             }
-            Action::RetryPlayback => {
-                self.command(|player| async move { player.retry_playback().await });
-            }
             Action::Logout => self.open_logout_confirmation(),
-        }
-    }
-
-    /// Play what the sidebar shows, never what the list cursor is on. A paused
-    /// player resumes and a playing one is left alone, so moving the cursor and
-    /// pressing play can never start a different track.
-    fn play_current(&mut self) {
-        if self.feed_restored_queue() {
-            return;
-        }
-        if self.player_state.paused || self.player_state.track().is_none() {
-            self.command(|player| async move { player.toggle_pause().await });
         }
     }
 
@@ -2153,6 +2373,20 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             return;
         }
         self.arm_rest();
+    }
+
+    fn navigate_header(&mut self, forward: bool) {
+        if self.account_focused() {
+            self.switch_tab(if forward { Tab::Home } else { Tab::Settings });
+        } else if (forward && self.tab == Tab::Settings) || (!forward && self.tab == Tab::Home) {
+            self.interaction.focus(PageFocus::Account);
+        } else {
+            self.switch_tab(if forward {
+                self.tab.next()
+            } else {
+                self.tab.previous()
+            });
+        }
     }
 
     /// Open the find bar over the crumbs of the open page.
@@ -2448,6 +2682,11 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     }
 
     fn reload(&mut self) {
+        if self.player_state.availability == redwax_player::PlaybackAvailability::Unavailable
+            || self.playback.needs_reconciliation()
+        {
+            self.command(|player| async move { player.retry_playback().await });
+        }
         match self.tab {
             Tab::Home => self.load_page(Target::Home, Some("home".to_string()), true),
             Tab::Library => self.load_page(Target::Library, Some("library".to_string()), true),
@@ -2465,165 +2704,8 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         self.fetch(Target::Search, Fetch::Search(search_query), Some(cache_key), true);
     }
 
-    fn open_actions(&mut self) {
-        let selected_item = self.active_browser().and_then(Browser::selected_item).cloned();
-        let selected_subject = selected_item
-            .as_ref()
-            .and_then(|item| self.action_subject(item, true));
-        let playing_subject = self
-            .player_state
-            .track()
-            .map(|track| self.track_action_subject(track, track.video_id.clone()));
-        let selected_playlist = self
-            .active_browser()
-            .and_then(Browser::open_playlist)
-            .map(|playlist| playlist.title.clone());
-        let playlist_editable = selected_item
-            .as_ref()
-            .and_then(Item::as_track)
-            .is_some_and(|track| track.playlist_entry.is_some());
-        let actions_menu = ActionsMenu::open(ActionMenuContext {
-            selected: selected_subject,
-            playing: playing_subject,
-            selected_is_queue_entry: self.tab == Tab::Queue,
-            selected_playlist,
-            playlist_editable,
-            signed_in: self.source.signed_in(),
-            playback_retry_available: self.player_state.availability
-                == redwax_player::PlaybackAvailability::Unavailable
-                || self.playback.needs_reconciliation(),
-        });
-        if let Some(actions_menu) = actions_menu {
-            self.eq.hide();
-            self.open_overlay(Overlay::Actions(actions_menu));
-        }
-    }
-
-    fn action_subject(&self, item: &Item, use_selected_queue_entry_identity: bool) -> Option<ActionSubject> {
-        match item {
-            Item::Track(track) => {
-                let subject_identity = if use_selected_queue_entry_identity && self.tab == Tab::Queue {
-                    let queue_index = self
-                        .active_browser()
-                        .and_then(Browser::selected)
-                        .map(|(_, item_index)| self.first_queue_index + item_index);
-                    queue_index
-                        .and_then(|queue_index| self.player_state.queue_entries.get(queue_index))
-                        .map(|queue_entry| queue_entry.id().to_string())
-                        .unwrap_or_else(|| format!("queue:{}", queue_index.unwrap_or(self.first_queue_index)))
-                } else {
-                    track.video_id.clone()
-                };
-                Some(self.track_action_subject(track, subject_identity))
-            }
-            Item::Album(album) => Some(ActionSubject {
-                identity: album.browse_id.clone(),
-                kind: SubjectKind::Album,
-                title: album.title.clone(),
-                has_album: false,
-            }),
-            Item::Playlist(playlist) => Some(ActionSubject {
-                identity: playlist.playlist_id.clone(),
-                kind: SubjectKind::Playlist,
-                title: playlist.title.clone(),
-                has_album: false,
-            }),
-            Item::Artist(_) => None,
-        }
-    }
-
-    fn track_action_subject(&self, track: &Track, subject_identity: String) -> ActionSubject {
-        ActionSubject {
-            identity: subject_identity,
-            kind: SubjectKind::Track,
-            title: track.title.clone(),
-            has_album: track.album_browse_id.is_some(),
-        }
-    }
-
-    fn invoke_selected_action(&mut self) {
-        let frozen_subject = self
-            .actions()
-            .and_then(ActionsMenu::subject)
-            .map(|(_, subject)| subject.identity.clone());
-        let selected_action = self.actions().map(ActionsMenu::selected);
-        let action_invocation = match selected_action {
-            Some(Ok(action_invocation)) => action_invocation,
-            Some(Err(reason)) => {
-                let reason = reason.to_string();
-                self.notify(reason, Some("Actions"), Level::Info);
-                return;
-            }
-            None => return,
-        };
-        if let (Some(target), Some(frozen_identity)) = (action_invocation.target, frozen_subject) {
-            let current_identity = match target {
-                ActionTarget::Selected => self
-                    .active_browser()
-                    .and_then(Browser::selected_item)
-                    .and_then(|item| self.action_subject(item, true))
-                    .map(|subject| subject.identity),
-                ActionTarget::Playing => self.player_state.track().map(|track| track.video_id.clone()),
-            };
-            if current_identity.as_deref() != Some(frozen_identity.as_str()) {
-                self.close_overlay();
-                self.notify(
-                    "The action target changed. Open actions again.",
-                    Some("Actions"),
-                    Level::Info,
-                );
-                return;
-            }
-        }
-        self.close_overlay();
-        self.invoke_action(action_invocation);
-    }
-
-    fn invoke_action(&mut self, invocation: ActionInvocation) {
-        if invocation.target == Some(ActionTarget::Selected) {
-            if invocation.action == Action::OpenAlbum {
-                self.open_album(ActionTarget::Selected);
-            } else {
-                self.act(invocation.action);
-            }
-            return;
-        }
-        match invocation.action {
-            Action::RetryPlayback | Action::Logout => self.act(invocation.action),
-            Action::AddToQueue => self.enqueue_playing(false),
-            Action::PlayNext => self.enqueue_playing(true),
-            Action::Radio => {
-                if let Some(track) = self.player_state.track().cloned() {
-                    self.radio_from(track);
-                }
-            }
-            Action::LikeHighlighted => self.like(self.player_state.track().cloned(), "Nothing is playing"),
-            Action::AddHighlightedToPlaylist => self.open_add_picker(false),
-            Action::RemoveFromPlaylist => self.open_remove_picker(),
-            Action::OpenAlbum => self.open_album(ActionTarget::Playing),
-            action => self.act(action),
-        }
-    }
-
-    fn enqueue_playing(&mut self, play_next: bool) {
-        let Some(track) = self.player_state.track().cloned() else {
-            return;
-        };
-        let track_description = track_label(&track);
-        self.command(move |player| async move { player.enqueue(vec![track], play_next).await });
-        let queue_destination = if play_next { "next" } else { "to queue" };
-        self.notify(
-            format!("{track_description} added {queue_destination}"),
-            None,
-            Level::Info,
-        );
-    }
-
-    fn open_album(&mut self, target: ActionTarget) {
-        let selected_track = match target {
-            ActionTarget::Selected => self.highlighted_track(),
-            ActionTarget::Playing => self.player_state.track(),
-        };
+    fn open_album(&mut self) {
+        let selected_track = self.highlighted_track();
         let Some(track) = selected_track.cloned() else {
             return;
         };
@@ -3638,16 +3720,18 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 Err(error) => self.notify(error, Some("Playback"), Level::Error),
             },
             AppEvent::SessionLoggedOut { error } => {
-                for request_slot in self.page_requests.values_mut() {
-                    request_slot.cancel();
+                self.cancel_account_reads();
+                self.liked_overrides.clear();
+                self.like_intents.forget_account();
+                if self.deps.page_cache.clear().is_err() {
+                    self.notify(
+                        "Old page cache could not be cleared.",
+                        Some("Account"),
+                        Level::Warning,
+                    );
                 }
-                for request_slot in self.prefetch_requests.values_mut() {
-                    request_slot.cancel();
-                }
-                self.account_request.cancel();
-                self.page_loaders.clear();
-                self.duration_fill_tasks.clear();
                 self.account.clear();
+                self.login_state = LoginState::SignedOut;
                 self.session_logged_out = true;
                 self.home.replace(Page::new("Home", Vec::new()));
                 self.search.replace(Page::new("Search", Vec::new()));
@@ -3700,16 +3784,64 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     return;
                 };
                 match account_result {
-                    Ok(account_name) => {
-                        self.account = account_name.unwrap_or_default();
+                    Ok(Some(identity)) if !identity.is_empty() => {
+                        self.account = identity;
+                        self.login_state = LoginState::SignedIn;
                         self.load_page(Target::Library, Some("library".to_string()), false);
                     }
-                    Err(error)
-                        if matches!(error, redwax_ytm::Error::Rejected)
-                            && !retry_attempted
-                            && self.refresh_session(Some(Retry::Account(request_id))) => {}
+                    Ok(_) => {
+                        self.login_state = if self.source.signed_in() {
+                            if self.account.is_empty() {
+                                LoginState::Unconfirmed
+                            } else {
+                                LoginState::SignedIn
+                            }
+                        } else {
+                            self.account.clear();
+                            LoginState::SignedOut
+                        };
+                        self.load_page(Target::Library, Some("library".to_string()), false);
+                    }
+                    Err(redwax_ytm::Error::Rejected) if !retry_attempted => {
+                        self.account.clear();
+                        self.login_state = if self.refresh_session(Some(Retry::Account(request_id))) {
+                            LoginState::Checking
+                        } else {
+                            self.notify("YouTube rejected the session", Some("Account"), Level::Error);
+                            LoginState::SignedOut
+                        };
+                    }
                     Err(error) => {
+                        if matches!(error, redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) {
+                            self.account.clear();
+                            self.login_state = LoginState::SignedOut;
+                        } else if self.account.is_empty() {
+                            self.login_state = LoginState::Unconfirmed;
+                        }
                         self.notify(error.to_string(), Some("YouTube Music"), Level::Error);
+                    }
+                }
+            }
+            AppEvent::AccountChoices { request, result } => {
+                if self.account_choices_request.complete(request).is_none() {
+                    return;
+                }
+                let current = self.account.clone();
+                if let Some(picker) = self.account_picker_mut() {
+                    picker.loaded(result, &current);
+                }
+            }
+            AppEvent::AccountChanged { request, result } => {
+                if self.account_change_request.complete(request).is_none() {
+                    return;
+                }
+                match result {
+                    Ok(identity) => self.account_changed(identity),
+                    Err(error) => {
+                        if let Some(picker) = self.account_picker_mut() {
+                            picker.status = ui::accounts::Status::Failed(error.clone());
+                        }
+                        self.notify(error, Some("Account"), Level::Error);
                     }
                 }
             }
@@ -4533,7 +4665,8 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             ui::header::HeaderView {
                 mode: frame_layout.header_mode,
                 active_tab: self.tab,
-                account: &self.account,
+                account: self.login_state.label(&self.account),
+                account_focused: self.account_focused(),
                 radio_loading: page_is_loading,
                 icons: &icons,
                 theme: &theme,
@@ -4546,35 +4679,21 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             area.width,
             frame_layout.content.height,
         );
-        let hint_context = match self.tab {
-            Tab::Queue => ui::keys_bar::HintContext::Queue,
-            Tab::Search => ui::keys_bar::HintContext::Search,
-            Tab::Lyrics => ui::keys_bar::HintContext::Playback,
-            _ => ui::keys_bar::HintContext::Browse,
-        };
+
         if let Some(sidebar) = frame_layout.sidebar {
-            let current_track_liked = self
-                .player_state
-                .track()
-                .map(|track| self.is_liked(track))
-                .unwrap_or(false);
             let upcoming_tracks = self.player_state.upcoming(ui::sidebar::QUEUE_ROWS);
             hit_map.extend(ui::sidebar::sidebar(
                 buffer,
                 sidebar.area,
                 ui::sidebar::SidebarView {
                     current_track: self.player_state.track(),
-                    player_state: &self.player_state,
-                    current_track_liked,
                     upcoming_tracks: &upcoming_tracks,
                     cover_art: ui::sidebar::ArtView {
                         protocol: self.art.render_protocol.as_ref(),
                         cover_height: self.art.cover_height.min(sidebar.cover_max_height),
                     },
-                    icons: &icons,
                     theme: &theme,
                     motion,
-                    hint_context,
                 },
             ));
         }
@@ -4717,12 +4836,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             },
         ));
         if let Some(hints) = frame_layout.hints {
-            hit_map.extend(ui::keys_bar::contextual_keys_bar(
-                buffer,
-                hints,
-                &theme,
-                hint_context,
-            ));
+            hit_map.extend(ui::keys_bar::keys_bar(buffer, hints, &theme));
         }
         if self.eq.visible() {
             let (eq_panel, eq_hit_regions) = ui::eq::eq(
@@ -4770,12 +4884,14 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             );
             hit_map.add(picker_panel, ui::Hit::Overlay);
         }
-        if let Some(actions) = self.actions() {
-            let actions_paint = ui::actions::actions(buffer, body, actions, &theme);
-            hit_map.add(actions_paint.panel, ui::Hit::Overlay);
-            for (row_area, action_row_index) in actions_paint.row_regions {
-                hit_map.add(row_area, ui::Hit::ActionRow(action_row_index));
-            }
+        if let Some(picker) = self.account_picker() {
+            hit_map.extend(ui::accounts::accounts(
+                buffer,
+                body,
+                picker,
+                &self.account,
+                &theme,
+            ));
         }
         if let Some(Prompt::ClearQueue(prompt)) = self.prompt() {
             let message = format!(
