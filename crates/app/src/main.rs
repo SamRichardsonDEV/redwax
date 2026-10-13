@@ -181,15 +181,25 @@ fn login_main(
         dump_dir: config::cache_dir().join("dumps"),
         home_rows: config.home_rows,
     });
-    if let Some(requested_account) = &account_query
-        && let Err(error) = runtime.block_on(choose_account(&client, &mut prepared, requested_account))
-    {
+    if list_accounts && account_query.is_none() {
+        let accounts = runtime
+            .block_on(client.accounts())
+            .map_err(|error| error.to_string())?;
+        print_accounts(&accounts);
+        return Ok(true);
+    }
+    let selection = match account_query.as_deref() {
+        Some(query) => runtime.block_on(choose_account(&client, &mut prepared, query)),
+        None => runtime.block_on(choose_browser_account(&client, &mut prepared)),
+    };
+    if let Err(error) = selection {
         eprintln!("redwax login: {error}");
         return Ok(false);
     }
 
     match runtime.block_on(client.whoami()) {
         Ok(Some(handle)) => {
+            prepared.confirm_account(&handle)?;
             let selected_browser = prepared.source().browser;
             prepared.publish(&config)?;
             println!("Signed in as {handle}.");
@@ -201,6 +211,7 @@ fn login_main(
                 print_accounts(&accounts);
             }
             println!("Run `{}` to open your library.", redwax::cli::program_name());
+            println!("Restart any running redwax to use this account.");
             Ok(true)
         }
         Ok(None) => {
@@ -247,6 +258,20 @@ async fn choose_account(
         format!("no account matches {account_query}")
     })?;
     prepared.select_account(selected_account)?;
+    client.reload(Some(prepared.session().clone()));
+    Ok(())
+}
+
+async fn choose_browser_account(
+    client: &Client,
+    prepared: &mut session::PreparedBrowserSession,
+) -> Result<(), String> {
+    let account = client
+        .browser_account()
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| "The browser has no selected YouTube account. Use `redwax login --list-accounts` and `redwax login --account NUMBER`.".to_owned())?;
+    prepared.select_account(&account)?;
     client.reload(Some(prepared.session().clone()));
     Ok(())
 }
@@ -718,16 +743,26 @@ async fn run(config_path: Option<PathBuf>) -> Result<(), String> {
             return Err(String::new());
         }
         let import_config = config.clone();
-        match tokio::task::spawn_blocking(move || {
-            let prepared = session::prepare_from_browser(&import_config, None, None)?;
-            let browser = prepared.source().browser;
-            let browser_session = prepared.publish(&import_config)?;
-            Ok::<_, String>((browser_session, browser))
-        })
-        .await
+        match tokio::task::spawn_blocking(move || session::prepare_from_browser(&import_config, None, None))
+            .await
         {
-            Ok(Ok((browser_session, browser))) => {
+            Ok(Ok(mut prepared)) => {
+                let client = Client::new(ClientOptions {
+                    session: Some(prepared.session().clone()),
+                    dump_dir: config::cache_dir().join("dumps"),
+                    home_rows: config.home_rows,
+                });
+                choose_browser_account(&client, &mut prepared).await?;
+                let identity = client
+                    .whoami()
+                    .await
+                    .map_err(|error| error.to_string())?
+                    .ok_or_else(|| "Browser login was not confirmed. Run `redwax login`.".to_owned())?;
+                prepared.confirm_account(&identity)?;
+                let browser = prepared.source().browser;
+                let browser_session = prepared.publish(&config)?;
                 println!("Imported your {} session. Opening redwax.", browser.name());
+                println!("Signed in as {identity}.");
                 initial_session = Some(browser_session);
             }
             Ok(Err(error)) => {
@@ -767,6 +802,12 @@ async fn run(config_path: Option<PathBuf>) -> Result<(), String> {
     };
     let (refresh_session, log_out, session_coordinator) =
         session_refresher(&config, music_source.clone(), resolver.clone());
+    let account_access = Arc::new(session::BrowserAccountAccess::new(
+        config.clone(),
+        music_source.clone(),
+        resolver.clone(),
+        session_coordinator.clone(),
+    ));
     let dependencies = Deps {
         icons: icons::icon_set(&config.icons),
         theme: first_theme(&config),
@@ -779,6 +820,7 @@ async fn run(config_path: Option<PathBuf>) -> Result<(), String> {
         state_store: redwax::state::PlaybackStateStore::new(config.state_path.clone()),
         session_logout: Some(log_out),
         session_refresh: Some(refresh_session.clone()),
+        account_access: Some(account_access),
         config,
     };
     let player_options = redwax::services::player_options(&dependencies.config);

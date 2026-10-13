@@ -12,7 +12,7 @@
 //! Python functions `track_row`, `browsable_row` and `_cell` exactly, so the
 //! screens match. Unicode width from the `unicode-width` crate.
 
-pub mod actions;
+pub mod accounts;
 pub mod anim;
 pub mod confirm;
 pub mod eq;

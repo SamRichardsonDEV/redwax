@@ -161,7 +161,15 @@ async fn queueing_an_incomplete_playlist_refuses_to_enqueue_a_prefix() {
     app.draw();
     app.app.start_background();
     app.settle().await;
-    app.press_all(&["j", "j", "a"]).await;
+    app.press_all(&["j", "j"]).await;
+    let selected_item = app
+        .app
+        .home
+        .selected_item()
+        .cloned()
+        .expect("highlighted playlist");
+    app.right_click(|hit| matches!(hit, Hit::Row(row) if row.item == selected_item))
+        .await;
 
     assert!(app.source.called("continue:batch:1"));
     assert!(app.app.player_state.queue.is_empty());
@@ -501,36 +509,6 @@ async fn test_home_loads_and_enter_plays_a_track() {
 }
 
 #[tokio::test]
-async fn selected_track_play_action_plays_the_selected_row() {
-    let mut app = Harness::start("actions-play-selected").await;
-
-    app.press("o").await;
-    app.draw();
-    assert!(app.screen().contains("ACTIONS"), "{}", app.screen());
-    app.press("enter").await;
-
-    assert_eq!(app.player.calls(), vec!["play:0".to_string()]);
-}
-
-#[tokio::test]
-async fn selected_action_refuses_a_row_that_changed_under_the_popup() {
-    let mut app = Harness::start("actions-stale-selected").await;
-
-    app.press("o").await;
-    let current_row = app.app.home.cursor().expect("selected home row");
-    app.app.home.select_row(Some(current_row + 1));
-    app.press("enter").await;
-
-    assert!(app.player.calls().is_empty());
-    assert!(
-        app.app
-            .notifications
-            .iter()
-            .any(|notification| notification.text.contains("action target changed"))
-    );
-}
-
-#[tokio::test]
 async fn opening_a_queue_tracks_album_leaves_the_queue_browser_intact() {
     let mut setup = Setup::new("queue-open-album");
     setup.saved = SavedState {
@@ -541,11 +519,7 @@ async fn opening_a_queue_tracks_album_leaves_the_queue_browser_intact() {
     let mut app = setup.build();
     app.draw();
 
-    app.press("o").await;
-    for _ in 0..9 {
-        app.press("j").await;
-    }
-    app.press("enter").await;
+    app.press("b").await;
     app.settle().await;
 
     assert_eq!(app.app.tab, Tab::Home);
@@ -602,7 +576,7 @@ async fn test_search_flow_and_queueing() {
     assert!(!app.app.search_focused());
     assert!(app.screen().contains("/ search again"));
 
-    app.press("a").await;
+    app.right_click(|hit| matches!(hit, Hit::Row(_))).await;
     assert_eq!(app.player.calls(), vec!["enqueue:1:false".to_string()]);
 
     app.press("4").await;
@@ -747,9 +721,9 @@ async fn test_plain_lyrics_still_render() {
 async fn test_like_toggles_and_is_sent_to_the_source() {
     let mut app = Harness::start("like-toggle").await;
     app.playing();
-    app.press("L").await;
+    app.press("+").await;
     assert_eq!(app.source.liked().get("v1"), Some(&false));
-    app.press("L").await;
+    app.press("+").await;
     assert_eq!(app.source.liked().get("v1"), Some(&true));
 }
 
@@ -772,16 +746,17 @@ async fn test_vim_and_arrow_keys_move_between_tabs() {
     app.press_all(&["h", "left", "left"]).await;
     assert_eq!(app.app.tab, Tab::Home);
     app.press("h").await;
-    assert_eq!(
-        app.app.tab,
-        Tab::Settings,
-        "wrapping left does not reach the last tab"
-    );
-    app.press("l").await;
     assert_eq!(app.app.tab, Tab::Home);
+    assert!(app.app.account_focused());
     app.press("h").await;
     assert_eq!(app.app.tab, Tab::Settings);
-    app.press("h").await;
+    assert!(!app.app.account_focused());
+    app.press("l").await;
+    assert_eq!(app.app.tab, Tab::Settings);
+    assert!(app.app.account_focused());
+    app.press("l").await;
+    assert_eq!(app.app.tab, Tab::Home);
+    app.press_all(&["h", "h", "h"]).await;
     assert_eq!(app.app.tab, Tab::Themes);
     app.press("h").await;
     assert_eq!(app.app.tab, Tab::Lyrics);
@@ -1051,6 +1026,7 @@ async fn test_first_frame_needs_no_network() {
         state_store: redwax::state::PlaybackStateStore::new(config.state_path.clone()),
         session_refresh: None,
         session_logout: None,
+        account_access: None,
         config,
     };
     let (sender, _events) = tokio::sync::mpsc::unbounded_channel();
@@ -1402,42 +1378,12 @@ async fn test_the_picker_cancels_on_escape() {
 }
 
 #[tokio::test]
-async fn test_l_likes_what_plays_and_plus_likes_the_row() {
-    let mut app = Harness::start("like-playing").await;
-    // The cursor starts on Alpine Glow while Snowline plays.
+async fn test_plus_likes_the_highlighted_row_while_a_different_track_plays() {
+    let mut app = Harness::start("like-highlighted").await;
     app.playing_queue(tracks(), 1);
-    app.press("L").await;
-    assert_eq!(
-        app.source.liked().get("v2"),
-        Some(&true),
-        "L missed the playing track"
-    );
-    assert_eq!(app.source.liked().get("v1"), None, "L liked the highlighted row");
-
     app.press("+").await;
-    assert_eq!(
-        app.source.liked().get("v1"),
-        Some(&false),
-        "+ missed the highlighted row"
-    );
-}
-
-#[tokio::test]
-async fn test_l_with_nothing_playing_likes_nothing() {
-    let mut app = Harness::start("like-nothing").await;
-    app.press("L").await;
-    assert!(
-        app.source.liked().is_empty(),
-        "L liked a row while nothing played"
-    );
-    assert!(
-        app.app
-            .notifications
-            .iter()
-            .any(|note| note.text.contains("Nothing is playing")),
-        "no toast: {:?}",
-        app.app.notifications
-    );
+    assert_eq!(app.source.liked().get("v1"), Some(&false));
+    assert_eq!(app.source.liked().get("v2"), None);
 }
 
 #[tokio::test]
@@ -1798,9 +1744,9 @@ async fn test_the_queue_box_fills_the_room_the_sidebar_leaves() {
 }
 
 #[tokio::test]
-async fn test_the_keys_box_lists_in_two_columns() {
+async fn keys_box_keeps_two_columns_without_section_titles() {
     let mut setup = Setup::new("keys-box");
-    setup.height = 55;
+    setup.height = 70;
     let mut app = setup.build();
     app.draw();
     app.app.start_background();
@@ -1840,17 +1786,11 @@ async fn test_the_keys_box_lists_in_two_columns() {
         );
     }
 
-    // One row carries a hint from each column, which is what two columns means.
-    let first = app.row(keys_top + 1);
-    assert!(first.contains("j"), "no first key: {first:?}");
-    assert!(first.contains("move"), "no first label: {first:?}");
-    assert!(first.contains("pause"), "no second column: {first:?}");
-    // The keys Sam called odd are two rows now, one word each.
-    assert!(
-        screen.contains("next") && screen.contains("prev"),
-        "n and p still share a row"
-    );
-    assert!(!screen.contains("n p"), "the old skip hint is still drawn");
+    assert!(app.row(keys_top + 1).contains("hjkl / arrows"));
+    assert!(!screen.contains("Songs & playlists"));
+    let queue_hint = app.row_of("q queue");
+    assert!(app.row(queue_hint).contains("+ like"));
+    assert!(screen.contains("b album"));
 }
 
 #[tokio::test]
@@ -1865,7 +1805,10 @@ async fn test_the_keys_bar_returns_when_the_sidebar_hides() {
 
     let height = app.terminal.backend().buffer().area().height;
     let bar = app.row(height - 1);
-    assert!(bar.contains("move"), "no hint row: {bar:?}");
+    assert!(
+        bar.contains("hjkl") && !bar.contains("Navigation"),
+        "no hint row: {bar:?}"
+    );
     assert!(
         !app.screen().contains("KEYS"),
         "the box was drawn with no sidebar"
@@ -2123,10 +2066,9 @@ async fn test_the_eq_is_a_side_pane_with_a_rule() {
     );
 }
 
-/// R14 restores the queue into the app, not into mpv, so the first play key
-/// after a relaunch has to hand mpv the queue before anything can start.
+/// The removed resume shortcut must not feed the restored queue.
 #[tokio::test]
-async fn test_play_starts_the_track_the_sidebar_restored() {
+async fn removed_x_binding_leaves_the_restored_queue_paused() {
     let mut setup = Setup::new("restored-play");
     let queue: Vec<Track> = support::tracks().into_iter().cycle().take(9).collect();
     setup.saved = SavedState {
@@ -2139,7 +2081,7 @@ async fn test_play_starts_the_track_the_sidebar_restored() {
     assert!(app.player.calls().is_empty(), "mpv was told before a key");
 
     app.press("x").await;
-    assert_eq!(app.player.calls(), vec!["play:4".to_string()]);
+    assert!(app.player.calls().is_empty());
     assert_eq!(app.app.player_state.index, Some(4));
 }
 
@@ -2282,10 +2224,9 @@ async fn a_new_playback_warning_becomes_a_toast() {
     assert_eq!(warning_count(&app), 2, "the next selected track did not warn");
 }
 
-/// The reason the play key exists: a cursor that has moved off the playing
-/// track must not change what plays.
+/// Space resumes the current track even when the list cursor has moved.
 #[tokio::test]
-async fn test_play_never_starts_what_the_cursor_moved_onto() {
+async fn space_resumes_current_playback_and_x_does_nothing() {
     let mut app = Harness::start("play-not-cursor").await;
     app.press("enter").await;
     let after_open = app.player.calls();
@@ -2295,10 +2236,12 @@ async fn test_play_never_starts_what_the_cursor_moved_onto() {
     app.press("x").await;
     assert_eq!(app.player.calls(), after_open, "play followed the cursor");
 
-    // Paused, the same key resumes rather than starting the cursor's track.
+    // The cursor does not choose which track Space resumes.
     app.press("space").await;
     assert!(app.app.player_state.paused);
     app.press("x").await;
+    assert!(app.app.player_state.paused);
+    app.press("space").await;
     assert_eq!(
         app.player.calls().last().map(String::as_str),
         Some("toggle_pause")
@@ -2599,71 +2542,26 @@ async fn resizing_during_a_seek_drag_cancels_the_stale_slider() {
     );
 }
 
-/// Shuffle, previous, play/pause, next and repeat, under the track lines and
-/// above the keys box, each one a pointer target.
 #[tokio::test]
-async fn test_the_sidebar_has_a_transport_row() {
-    let mut setup = Setup::new("transport");
+async fn playback_buttons_only_appear_in_the_bottom_player_bar() {
+    let mut setup = Setup::new("bottom-transport-only");
     setup.height = 55;
     let mut app = setup.build();
     app.draw();
     app.app.start_background();
     app.settle().await;
     app.press("enter").await;
-    app.draw();
-
-    let play = app.area_of(|hit| matches!(hit, Hit::PlayPause));
-    let previous = app.area_of(|hit| matches!(hit, Hit::Previous));
-    let next = app.area_of(|hit| matches!(hit, Hit::Next));
-    let shuffle = app.area_of(|hit| matches!(hit, Hit::Shuffle));
-    let repeat = app.area_of(|hit| matches!(hit, Hit::Repeat));
-
-    // The order across the row is the order on a phone.
-    assert!(shuffle.x < previous.x, "shuffle is not first");
-    assert!(previous.x < play.x, "previous is not before play");
-    assert!(play.x < next.x, "next is not after play");
-    assert!(next.x < repeat.x, "repeat is not last");
-    assert_eq!(play.y, previous.y, "the row is not one row");
-
-    // It sits between the track lines and the keys box.
-    let keys_top = app.row_of("\u{250c}\u{2500} KEYS ");
-    assert!(play.y < keys_top, "the transport is under the keys box");
-    assert!(
-        play.x < redwax::app::SIDEBAR_WIDTH,
-        "the transport is not in the sidebar"
-    );
-
-    // Centred: the air either side of the row matches.
-    let row = app.row(play.y);
-    let left = row.len() - row.trim_start().len();
-    let painted: Vec<usize> = (0..redwax::app::SIDEBAR_WIDTH as usize)
-        .filter(|x| row.chars().nth(*x).is_some_and(|c| c != ' '))
-        .collect();
-    let right = redwax::app::SIDEBAR_WIDTH as usize - 1 - painted.last().copied().unwrap_or(0);
-    assert!(
-        left.abs_diff(right) <= 2,
-        "the row is off centre: {left} then {right}"
-    );
-
-    // The buttons drive the player.
+    let body_bottom = app.terminal.backend().buffer().area().height - redwax::ui::layout::PLAYER_HEIGHT;
+    for (area, hit) in app.app.screen.hit_map().regions() {
+        if matches!(
+            hit,
+            Hit::PlayPause | Hit::Previous | Hit::Next | Hit::Shuffle | Hit::Repeat
+        ) {
+            assert!(area.y >= body_bottom);
+        }
+    }
     app.click(|hit| matches!(hit, Hit::PlayPause)).await;
-    assert!(
-        app.player.calls().iter().any(|c| c == "toggle_pause"),
-        "{:?}",
-        app.player.calls()
-    );
-    app.click(|hit| matches!(hit, Hit::Next)).await;
-    assert!(
-        app.player.calls().iter().any(|c| c == "next"),
-        "{:?}",
-        app.player.calls()
-    );
-    app.click(|hit| matches!(hit, Hit::Previous)).await;
-    assert!(
-        app.player.calls().iter().any(|c| c == "previous"),
-        "{:?}",
-        app.player.calls()
-    );
+    assert!(app.player.calls().iter().any(|call| call == "toggle_pause"));
 }
 
 /// Repeating the queue means the tracks at the top play after the last one, so
@@ -3720,4 +3618,176 @@ async fn reversed_page_completions_preserve_the_latest_intent_and_busy_state() {
             "Obsolete page"
         );
     }
+}
+
+#[tokio::test]
+async fn a_saved_login_without_an_identity_is_not_labelled_signed_out() {
+    let mut setup = Setup::new("login-unconfirmed");
+    setup.source = Arc::new(FakeSource {
+        handle: None,
+        ..FakeSource::default()
+    });
+    let mut app = setup.build();
+    app.draw();
+    assert!(app.header_row().contains("Checking login"));
+    app.app.start_background();
+    app.settle().await;
+    assert!(app.header_row().contains("Login unconfirmed"));
+    assert!(!app.header_row().contains("Sign in"));
+}
+
+#[tokio::test]
+async fn a_temporary_identity_failure_keeps_the_confirmed_account_visible() {
+    let mut app = Harness::start("login-temporary-failure").await;
+    let identity = app.app.account.clone();
+    assert!(!identity.is_empty());
+    app.app.handle_event(AppEvent::SessionRefreshed {
+        error: None,
+        retry: None,
+    });
+    loop {
+        match app.events.recv().await.expect("the identity check responds") {
+            AppEvent::AccountReady { request, .. } => {
+                app.app.handle_event(AppEvent::AccountReady {
+                    request,
+                    result: Err(redwax_ytm::Error::Network("temporary outage".to_owned())),
+                });
+                break;
+            }
+            event => app.app.handle_event(event),
+        }
+    }
+    app.draw();
+    assert_eq!(app.app.account, identity);
+    assert!(app.header_row().contains(&identity));
+    assert!(!app.header_row().contains("Sign in"));
+    app.app.handle_event(AppEvent::SessionLoggedOut { error: None });
+    app.draw();
+    assert!(app.header_row().contains("Sign in"));
+    assert!(app.app.account.is_empty());
+}
+
+#[tokio::test]
+async fn account_box_is_reachable_with_arrows_and_enter() {
+    let mut app = Harness::start("account-header-arrows").await;
+    let cursor = app.app.home.cursor();
+    app.press("left").await;
+    assert_eq!(app.app.tab, Tab::Home);
+    assert!(app.app.account_focused());
+    app.press("enter").await;
+    assert!(app.app.account_picker_visible());
+    assert_eq!(app.app.home.cursor(), cursor);
+    app.press("escape").await;
+    assert!(!app.app.account_picker_visible());
+    assert_eq!(app.app.tab, Tab::Home);
+}
+
+#[tokio::test]
+async fn tab_focuses_the_same_account_control_on_each_page() {
+    let mut app = Harness::start("account-header-tab").await;
+    for (key, view) in [
+        ("1", Tab::Home),
+        ("3", Tab::Library),
+        ("4", Tab::Queue),
+        ("5", Tab::Lyrics),
+        ("6", Tab::Themes),
+        ("7", Tab::Settings),
+    ] {
+        app.press(key).await;
+        assert!(!app.app.account_focused());
+        app.press("tab").await;
+        assert!(app.app.account_focused());
+        assert_eq!(app.app.tab, view);
+        app.press("tab").await;
+        assert!(!app.app.account_focused());
+        assert_eq!(app.app.tab, view);
+    }
+}
+
+#[tokio::test]
+async fn account_box_click_opens_a_picker_with_a_retry_when_login_is_unavailable() {
+    let mut app = Harness::start("account-header-click").await;
+    app.click(|hit| matches!(hit, Hit::Account)).await;
+    assert!(app.app.account_picker_visible());
+    assert!(
+        app.app
+            .screen
+            .hit_map()
+            .regions()
+            .iter()
+            .any(|(_, hit)| matches!(hit, Hit::AccountRow(0)))
+    );
+    app.press("escape").await;
+    assert!(!app.app.account_picker_visible());
+}
+
+#[tokio::test]
+async fn vim_edges_move_inside_the_account_picker_without_reaching_the_page() {
+    use ratatui::style::Modifier;
+
+    let mut app = Harness::start("account-picker-vim-edges").await;
+    let page_cursor = app.app.home.cursor();
+    app.press_all(&["tab", "enter"]).await;
+    let selected = |app: &Harness, row| {
+        let area = app.area_of(|hit| matches!(hit, Hit::AccountRow(index) if *index == row));
+        app.terminal
+            .backend()
+            .buffer()
+            .cell((area.x, area.y))
+            .unwrap()
+            .style()
+            .add_modifier
+            .contains(Modifier::BOLD)
+    };
+    assert!(selected(&app, 0));
+    app.press("G").await;
+    assert!(selected(&app, 1));
+    app.press("g").await;
+    assert!(selected(&app, 1));
+    app.press("g").await;
+    assert!(selected(&app, 0));
+    assert_eq!(app.app.home.cursor(), page_cursor);
+    app.press("escape").await;
+    assert!(!app.app.account_picker_visible());
+}
+
+#[tokio::test]
+async fn keys_panel_keeps_the_same_text_and_click_actions_on_every_tab() {
+    let mut app = Harness::start("universal-key-panel").await;
+    let panel = |app: &Harness| {
+        app.app
+            .screen
+            .hit_map()
+            .regions()
+            .iter()
+            .filter_map(|(area, hit)| {
+                if let Hit::KeyHint(action) = hit {
+                    let buffer = app.terminal.backend().buffer();
+                    let text = (area.x..area.right())
+                        .map(|x| buffer.cell((x, area.y)).unwrap().symbol())
+                        .collect::<String>();
+                    Some((*area, *action, text))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let expected = panel(&app);
+    assert!(!expected.is_empty());
+    for tab in ["2", "3", "4", "5", "6", "7", "1"] {
+        app.press(tab).await;
+        assert_eq!(panel(&app), expected);
+    }
+}
+
+#[tokio::test]
+async fn backspace_does_not_navigate_and_escape_goes_back() {
+    let mut app = Harness::start("escape-only-navigation").await;
+    app.press_all(&["j", "enter"]).await;
+    assert!(app.app.home.depth() > 1);
+    app.press("backspace").await;
+    assert!(app.app.home.depth() > 1);
+    app.press("escape").await;
+    assert_eq!(app.app.home.depth(), 1);
 }

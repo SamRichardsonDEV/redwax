@@ -10,17 +10,11 @@ use crate::app::Tab;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     TogglePause,
-    /// Resume the current playback item, never the list cursor.
-    Play,
     NextTrack,
     PreviousTrack,
     Seek(i32),
     Volume(i16),
-    AddToQueue,
-    PlayNext,
     Radio,
-    /// Like or unlike the track that plays, never the list cursor.
-    Like,
     /// Like or unlike the highlighted track, whatever plays.
     LikeHighlighted,
     ToggleShuffle,
@@ -49,15 +43,15 @@ pub enum Action {
     SwitchTab(Tab),
     /// Find on the open page, which is not the same as searching YouTube.
     FindOnPage,
+    OpenAccount,
+    FocusAccount,
     Back,
     Reload,
     ToggleHelp,
     ShowNotification,
     ToggleEq,
-    OpenActions,
     OpenAlbum,
     CycleFilter,
-    RetryPlayback,
     Logout,
     Quit,
     CursorDown,
@@ -105,24 +99,15 @@ impl Input {
 
 pub const BINDINGS: &[Binding] = &[
     bound(Input::Char(' '), "space", "Play/Pause", Action::TogglePause),
-    bound(Input::Char('x'), "x", "Resume current playback", Action::Play),
     bound(Input::Char('n'), "n", "Next track", Action::NextTrack),
     bound(Input::Char('p'), "p", "Previous track", Action::PreviousTrack),
-    bound(Input::Char(','), ",", "Seek back 5s", Action::Seek(-5)),
-    bound(Input::Char('.'), ".", "Seek forward 5s", Action::Seek(5)),
-    bound(Input::Char('<'), "<", "Seek back 30s", Action::Seek(-30)),
-    bound(Input::Char('>'), ">", "Seek forward 30s", Action::Seek(30)),
+    bound(Input::Char(','), ",", "Jump back 5 seconds", Action::Seek(-5)),
+    bound(Input::Char('.'), ".", "Jump forward 5 seconds", Action::Seek(5)),
+    bound(Input::Char('<'), "<", "Jump back 30 seconds", Action::Seek(-30)),
+    bound(Input::Char('>'), ">", "Jump forward 30 seconds", Action::Seek(30)),
     bound(Input::Char('-'), "-", "Volume down", Action::Volume(-5)),
     bound(Input::Char('='), "=", "Volume up", Action::Volume(5)),
-    bound(Input::Char('a'), "a", "Add to queue", Action::AddToQueue),
-    bound(Input::Char('A'), "A", "Play next", Action::PlayNext),
     bound(Input::Char('r'), "r", "Radio from track", Action::Radio),
-    bound(
-        Input::Char('L'),
-        "L",
-        "Like / unlike what is playing",
-        Action::Like,
-    ),
     bound(
         Input::Char('+'),
         "+",
@@ -204,14 +189,18 @@ pub const BINDINGS: &[Binding] = &[
         "Play, or enter the search box",
         Action::Open,
     ),
-    bound(Input::Code(KeyCode::Backspace), "backspace", "Back", Action::Back),
     bound(
         Input::Code(KeyCode::Esc),
         "escape",
         "Back, or leave the box",
         Action::Back,
     ),
-    bound(Input::Control('r'), "ctrl+r", "Reload tab", Action::Reload),
+    bound(
+        Input::Control('r'),
+        "ctrl+r",
+        "Reload tab or retry failed playback",
+        Action::Reload,
+    ),
     bound(Input::Char('1'), "1", "Home", Action::SwitchTab(Tab::Home)),
     bound(Input::Char('2'), "2", "Search", Action::SwitchTab(Tab::Search)),
     bound(Input::Char('3'), "3", "Library", Action::SwitchTab(Tab::Library)),
@@ -247,32 +236,29 @@ pub const BINDINGS: &[Binding] = &[
         "Bottom of this section",
         Action::Last,
     ),
-    list_hidden(Input::Control('d'), "ctrl+d", "Page down", Action::PageDown),
     list_hidden(
         Input::Code(KeyCode::PageDown),
         "page down",
         "Page down",
         Action::PageDown,
     ),
-    list_hidden(Input::Control('u'), "ctrl+u", "Page up", Action::PageUp),
     list_hidden(Input::Code(KeyCode::PageUp), "page up", "Page up", Action::PageUp),
     bound(Input::Char('{'), "{", "Previous section", Action::PreviousSection),
     bound(Input::Char('}'), "}", "Next section", Action::NextSection),
     bound(Input::Char('e'), "e", "Equaliser", Action::ToggleEq),
     bound(
-        Input::Char('o'),
-        "o",
-        "Actions for the highlighted item",
-        Action::OpenActions,
+        Input::Char('b'),
+        "b",
+        "Open the highlighted track album",
+        Action::OpenAlbum,
     ),
-    hidden_action("Open the highlighted track album", Action::OpenAlbum),
     bound(Input::Char('f'), "f", "Filter result kind", Action::CycleFilter),
-    listed(
-        "o menu",
-        "Retry playback after a failed restart",
-        Action::RetryPlayback,
+    bound(
+        Input::Code(KeyCode::Tab),
+        "tab",
+        "Focus account or return to the page",
+        Action::FocusAccount,
     ),
-    listed("o menu", "Sign out of YouTube Music", Action::Logout),
     bound(Input::Char('?'), "?", "Keys", Action::ToggleHelp),
     bound(Input::Char('Q'), "Q", "Quit", Action::Quit),
 ];
@@ -290,17 +276,6 @@ const fn bound(
         show: true,
         scope: Scope::Global,
         input: Some(input),
-    }
-}
-
-const fn listed(display_key: &'static str, description: &'static str, action: Action) -> Binding {
-    Binding {
-        key: display_key,
-        description,
-        action,
-        show: true,
-        scope: Scope::Global,
-        input: None,
     }
 }
 
@@ -360,17 +335,6 @@ const fn hidden(
         show: false,
         scope: Scope::Global,
         input: Some(input),
-    }
-}
-
-const fn hidden_action(description: &'static str, action: Action) -> Binding {
-    Binding {
-        key: "",
-        description,
-        action,
-        show: false,
-        scope: Scope::Global,
-        input: None,
     }
 }
 

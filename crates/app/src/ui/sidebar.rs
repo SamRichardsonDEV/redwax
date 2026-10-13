@@ -12,23 +12,14 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Widget;
 use ratatui_image::Image;
 use ratatui_image::protocol::Protocol;
-use redwax_player::{PlayerState, Repeat};
 use redwax_ytm::Track;
 
-use crate::icons::Icons;
 use crate::theme::Theme;
 use crate::ui::anim::{self, Motion};
 use crate::ui::hit::Hit;
-use crate::ui::keys_bar::{HintContext, KEYS_BOX_HEIGHT, KEYS_MIN_HEIGHT, contextual_keys_box};
+use crate::ui::keys_bar::{KEYS_BOX_HEIGHT, KEYS_MIN_HEIGHT, keys_box};
 use crate::ui::layout::cover_max_height;
-use crate::ui::{clip, fill, mix, put, spaces, span, width_of};
-
-/// Rows the transport takes: one of air, then the buttons.
-const TRANSPORT_HEIGHT: u16 = 2;
-
-/// Cells between two transport buttons, so the row reads as five controls
-/// rather than one run of glyphs.
-const BUTTON_GAP: usize = 5;
+use crate::ui::{clip, fill, mix, put, span, width_of};
 
 /// Tracks the queue box shows when it has the room.
 pub const QUEUE_ROWS: usize = 20;
@@ -45,14 +36,9 @@ pub struct ArtView<'a> {
 
 pub struct SidebarView<'a> {
     pub current_track: Option<&'a Track>,
-    /// The transport row reads the modes and whether anything is paused.
-    pub player_state: &'a PlayerState,
-    pub current_track_liked: bool,
     pub upcoming_tracks: &'a [Track],
     pub cover_art: ArtView<'a>,
-    pub icons: &'a Icons,
     pub theme: &'a Theme,
-    pub hint_context: HintContext,
     pub motion: Motion,
 }
 
@@ -125,11 +111,6 @@ pub fn sidebar(buffer: &mut Buffer, area: Rect, view: SidebarView<'_>) -> Vec<(R
         }
     }
 
-    if next_row_y + TRANSPORT_HEIGHT <= content_bottom {
-        hit_regions.extend(transport(buffer, content_area, next_row_y + 1, &view));
-        next_row_y += TRANSPORT_HEIGHT;
-    }
-
     if next_row_y < content_bottom {
         hit_regions.extend(boxes(
             buffer,
@@ -142,103 +123,6 @@ pub fn sidebar(buffer: &mut Buffer, area: Rect, view: SidebarView<'_>) -> Vec<(R
             &view,
         ));
     }
-    hit_regions
-}
-
-/// Shuffle, previous, play/pause, next, repeat, centred under the track lines
-/// the way a phone puts them under the cover.
-///
-/// Play is the one button drawn as a solid block rather than a glyph on the
-/// surface, which is how the centre of that row reads as the primary control
-/// without a circle the cell grid cannot draw.
-fn transport(
-    buffer: &mut Buffer,
-    content_area: Rect,
-    row_y: u16,
-    view: &SidebarView<'_>,
-) -> Vec<(Rect, Hit)> {
-    let theme = view.theme;
-    let icons = view.icons;
-    let player_state = view.player_state;
-
-    let shuffle_icon = match player_state.shuffle {
-        true => icons.shuffle,
-        false => icons.shuffle_off,
-    };
-    let repeat_icon = match player_state.repeat {
-        Repeat::Off => icons.repeat_off,
-        Repeat::All => icons.repeat,
-        Repeat::One => icons.repeat_one,
-    };
-    let playback_icon = icons.transport(player_state);
-
-    let enabled_style = Style::new().fg(theme.accent).add_modifier(Modifier::BOLD);
-    let disabled_style = Style::new().fg(theme.foreground).bg(theme.surface);
-    let primary_style = Style::new()
-        .fg(theme.surface)
-        .bg(theme.accent)
-        .add_modifier(Modifier::BOLD);
-
-    let transport_buttons = [
-        (
-            shuffle_icon,
-            if player_state.shuffle {
-                enabled_style
-            } else {
-                disabled_style
-            },
-            Hit::Shuffle,
-        ),
-        (icons.previous, disabled_style, Hit::Previous),
-        (playback_icon, primary_style, Hit::PlayPause),
-        (icons.next, disabled_style, Hit::Next),
-        (
-            repeat_icon,
-            if player_state.repeat == Repeat::Off {
-                disabled_style
-            } else {
-                enabled_style
-            },
-            Hit::Repeat,
-        ),
-    ];
-
-    // Every button is padded to the same cells, so the row is symmetric even
-    // where one glyph is wider than the rest.
-    let button_widths: Vec<usize> = transport_buttons
-        .iter()
-        .map(|(icon, ..)| width_of(icon) + 2)
-        .collect();
-    let total_width = button_widths.iter().sum::<usize>() + BUTTON_GAP * (transport_buttons.len() - 1);
-    let left_padding = (content_area.width as usize).saturating_sub(total_width) / 2;
-
-    let mut line_spans = vec![spaces(left_padding)];
-    let mut hit_regions = Vec::new();
-    let mut next_column = left_padding;
-    for (button_index, (button_icon, button_style, hit_target)) in transport_buttons.into_iter().enumerate() {
-        if button_index > 0 {
-            line_spans.push(spaces(BUTTON_GAP));
-            next_column += BUTTON_GAP;
-        }
-        let icon_padding = button_widths[button_index] - width_of(button_icon);
-        let button_text = format!(
-            "{}{button_icon}{}",
-            " ".repeat(icon_padding / 2),
-            " ".repeat(icon_padding - icon_padding / 2)
-        );
-        hit_regions.push((
-            Rect::new(
-                content_area.x + next_column as u16,
-                row_y,
-                button_widths[button_index] as u16,
-                1,
-            ),
-            hit_target,
-        ));
-        line_spans.push(span(button_text, button_style));
-        next_column += button_widths[button_index];
-    }
-    put(buffer, content_area, row_y, line_spans);
     hit_regions
 }
 
@@ -274,11 +158,10 @@ fn boxes(buffer: &mut Buffer, area: Rect, view: &SidebarView<'_>) -> Vec<(Rect, 
         view,
     );
     let keys_bottom = bottom - queue_height;
-    hit_regions.extend(contextual_keys_box(
+    hit_regions.extend(keys_box(
         buffer,
         Rect::new(area.x, keys_bottom - keys_height, area.width, keys_height),
         view.theme,
-        view.hint_context,
     ));
     hit_regions
 }

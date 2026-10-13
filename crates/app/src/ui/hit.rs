@@ -30,6 +30,8 @@ pub enum Hit {
     Overlay,
     Notification(usize),
     Tab(Tab),
+    Account,
+    AccountRow(usize),
     /// A row of a browser list, by its index into the flattened page.
     Row(RowTarget),
     /// The whole list, under the rows, so the wheel knows which one it is over.
@@ -57,7 +59,6 @@ pub enum Hit {
     /// One equaliser column, with the region it fills, because the gain a
     /// click asks for comes from where in that column the pointer landed.
     EqBand(usize, Rect),
-    ActionRow(usize),
     Confirmation(ConfirmationChoice),
 }
 

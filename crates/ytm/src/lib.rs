@@ -277,6 +277,25 @@ impl Client {
             .clear();
     }
 
+    /// An explicit login follows the browser without changing its cookies.
+    pub async fn browser_account(&self) -> Result<Option<Account>> {
+        if !self.signed_in() {
+            return Err(Error::SignedOut);
+        }
+        let response = self.transport.account_switcher().await?;
+        let authuser = self
+            .transport
+            .session()
+            .map(|session| session.identity().authuser())
+            .unwrap_or(0);
+        let mut items = Vec::new();
+        collect_key(&response, "accountItem", &mut items);
+        Ok(items
+            .into_iter()
+            .find(|item| item.get("isSelected").and_then(Value::as_bool) == Some(true))
+            .and_then(|item| account_in(item, authuser)))
+    }
+
     /// A failed dump keeps the intended path so diagnostics can still name the unreadable page.
     fn dump(&self, page_name: &'static str, responses: &[Value]) -> Error {
         let timestamp_millis = std::time::SystemTime::now()
@@ -812,7 +831,7 @@ impl MusicSource for Client {
         if !self.signed_in() {
             return Err(Error::SignedOut);
         }
-        let response = self.transport.post("account/account_menu", json!({})).await?;
+        let response = self.transport.account_switcher().await?;
         let authuser = self
             .transport
             .session()
@@ -1189,20 +1208,7 @@ fn accounts_in(response: &Value, authuser: u32) -> Vec<Account> {
     collect_key(response, "accountItem", &mut account_items);
     let available_accounts: Vec<Account> = account_items
         .into_iter()
-        .filter_map(|item| {
-            let name = item.get("accountName").and_then(walker::text)?;
-            let mut page_id_tokens = Vec::new();
-            collect_key(item, "pageIdToken", &mut page_id_tokens);
-            Some(Account {
-                authuser,
-                page_id: page_id_tokens
-                    .iter()
-                    .find_map(|token| token.get("pageId").and_then(Value::as_str))
-                    .map(str::to_string),
-                name,
-                handle: item.get("channelHandle").and_then(walker::text),
-            })
-        })
+        .filter_map(|item| account_in(item, authuser))
         .collect();
     if !available_accounts.is_empty() {
         return available_accounts;
@@ -1217,6 +1223,41 @@ fn accounts_in(response: &Value, authuser: u32) -> Vec<Account> {
             }]
         })
         .unwrap_or_default()
+}
+
+fn account_in(item: &Value, fallback_authuser: u32) -> Option<Account> {
+    if item.get("isDisabled").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
+    let name = item.get("accountName").and_then(walker::text)?;
+    let mut signin_tokens = Vec::new();
+    collect_key(item, "accountSigninToken", &mut signin_tokens);
+    let signin_url = signin_tokens
+        .iter()
+        .find_map(|token| token.get("signinUrl").and_then(Value::as_str));
+    let authuser = match signin_url {
+        Some(signin_url) => {
+            let origin = reqwest::Url::parse(innertube::YTM_URL).ok()?;
+            let url = origin.join(signin_url).ok()?;
+            url.query_pairs()
+                .find(|(name, _)| name == "authuser")?
+                .1
+                .parse()
+                .ok()?
+        }
+        None => fallback_authuser,
+    };
+    let mut page_id_tokens = Vec::new();
+    collect_key(item, "pageIdToken", &mut page_id_tokens);
+    Some(Account {
+        authuser,
+        page_id: page_id_tokens
+            .iter()
+            .find_map(|token| token.get("pageId").and_then(Value::as_str))
+            .map(str::to_string),
+        name,
+        handle: item.get("channelHandle").and_then(walker::text),
+    })
 }
 
 struct Identity {
@@ -1666,6 +1707,54 @@ mod length_tests {
 #[cfg(test)]
 mod account_tests {
     use super::*;
+
+    #[test]
+    fn switcher_preserves_google_indices_and_brand_channels() {
+        let response = json!({"data": {"items": [
+            {"accountItem": {
+                "accountName": {"simpleText": "Personal"},
+                "serviceEndpoint": {"selectActiveIdentityEndpoint": {"supportedTokens": [
+                    {"accountSigninToken": {"signinUrl": "/signin?authuser=1&next=%2F"}}
+                ]}}
+            }},
+            {"accountItem": {
+                "accountName": {"simpleText": "Brand"},
+                "channelHandle": {"simpleText": "@example-brand"},
+                "serviceEndpoint": {"selectActiveIdentityEndpoint": {"supportedTokens": [
+                    {"accountSigninToken": {"signinUrl": "/signin?authuser=1&pageid=example-page"}},
+                    {"pageIdToken": {"pageId": "example-page"}}
+                ]}}
+            }},
+            {"accountItem": {
+                "accountName": {"simpleText": "Other Google login"},
+                "serviceEndpoint": {"selectActiveIdentityEndpoint": {"supportedTokens": [
+                    {"accountSigninToken": {"signinUrl": "https://www.youtube.com/signin?authuser=0"}}
+                ]}}
+            }}
+        ]}});
+        let accounts = accounts_in(&response, 9);
+        assert_eq!(accounts.len(), 3);
+        assert_eq!(
+            accounts
+                .iter()
+                .map(|account| account.authuser)
+                .collect::<Vec<_>>(),
+            vec![1, 1, 0]
+        );
+        assert_eq!(accounts[1].page_id.as_deref(), Some("example-page"));
+        assert_eq!(find_account(&accounts, "example-brand"), Some(&accounts[1]));
+    }
+
+    #[test]
+    fn switcher_omits_disabled_and_invalid_identities() {
+        for item in [
+            json!({"accountName": {"simpleText": "Disabled"}, "isDisabled": true}),
+            json!({"accountName": {"simpleText": "Missing index"}, "accountSigninToken": {"signinUrl": "/signin"}}),
+            json!({"accountName": {"simpleText": "Invalid index"}, "accountSigninToken": {"signinUrl": "/signin?authuser=invalid"}}),
+        ] {
+            assert!(account_in(&item, 0).is_none());
+        }
+    }
 
     fn accounts() -> Vec<Account> {
         vec![

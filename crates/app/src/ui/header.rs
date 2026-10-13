@@ -12,12 +12,13 @@ use crate::icons::Icons;
 use crate::theme::Theme;
 use crate::ui::hit::Hit;
 use crate::ui::layout::HeaderMode;
-use crate::ui::{fill, put, span, width_of};
+use crate::ui::{clip, fill, put, span, width_of};
 
 pub struct HeaderView<'a> {
     pub mode: HeaderMode,
     pub active_tab: Tab,
     pub account: &'a str,
+    pub account_focused: bool,
     pub radio_loading: bool,
     pub icons: &'a Icons,
     pub theme: &'a Theme,
@@ -25,6 +26,42 @@ pub struct HeaderView<'a> {
 
 /// Returns the label of every tab as a clickable region.
 pub fn header(buffer: &mut Buffer, area: Rect, view: HeaderView<'_>) -> Vec<(Rect, Hit)> {
+    if area.is_empty() {
+        return Vec::new();
+    }
+    let label = format!("{} {} \u{25be}", view.icons.user, view.account);
+    let width = (width_of(&label) + 4)
+        .min(32)
+        .min((area.width as usize / 2).max(4))
+        .min(area.width as usize) as u16;
+    let account_area = Rect::new(area.right() - width, area.y, width, 1);
+    let navigation_area = Rect::new(area.x, area.y, area.width - width, 1);
+    let navigation_view = HeaderView { account: "", ..view };
+    let mut hits = navigation_header(buffer, navigation_area, &navigation_view);
+    let style = if view.account_focused {
+        Style::new()
+            .fg(view.theme.accent)
+            .bg(view.theme.panel)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::new().fg(view.theme.dim).bg(view.theme.surface)
+    };
+    fill(buffer, account_area, style.bg.unwrap_or(view.theme.surface));
+    let text = format!("[ {} ]", clip(&label, width.saturating_sub(4) as usize));
+    put(
+        buffer,
+        account_area,
+        area.y,
+        vec![span(clip(&text, width as usize), style)],
+    );
+    hits.push((account_area, Hit::Account));
+    hits
+}
+
+fn navigation_header(buffer: &mut Buffer, area: Rect, view: &HeaderView<'_>) -> Vec<(Rect, Hit)> {
+    if area.is_empty() {
+        return Vec::new();
+    }
     fill(buffer, area, view.theme.surface);
     let accent = Style::new().fg(view.theme.accent);
     let accent_bold = accent.add_modifier(Modifier::BOLD);
@@ -36,7 +73,7 @@ pub fn header(buffer: &mut Buffer, area: Rect, view: HeaderView<'_>) -> Vec<(Rec
         .add_modifier(Modifier::UNDERLINED);
 
     if view.mode == HeaderMode::Compact {
-        return compact_header(buffer, area, &view, seam, accent_bold.patch(under_active));
+        return compact_header(buffer, area, view, seam, accent_bold.patch(under_active));
     }
 
     let HeaderView {
@@ -45,8 +82,8 @@ pub fn header(buffer: &mut Buffer, area: Rect, view: HeaderView<'_>) -> Vec<(Rec
         radio_loading,
         icons,
         theme,
-        mode: _,
-    } = view;
+        ..
+    } = *view;
     let available_width = area.width as usize;
 
     let mut line_spans = vec![

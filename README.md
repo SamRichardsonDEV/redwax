@@ -118,34 +118,48 @@ redwax login --list-accounts
 redwax login --account 2
 ```
 
+Inside redwax, press `tab` to focus the account box at the top right, then
+`enter` to open the account picker. Choose with arrows or `j` and `k`, then
+press `enter` to switch. Press `escape` to cancel. Playback continues while
+you switch accounts.
+
+`redwax login` follows the account selected in your browser. Changing account
+on the website alone does not switch a running redwax. Account listing leaves
+your saved login unchanged. `--account` selects an identity explicitly.
+
 redwax remembers that selection for later refreshes. Open Home and Library,
 search for a song and play it. After quitting and relaunching, the saved queue
 and position return paused.
 
 ## Keys
 
-Press `?` for contextual help. Mouse clicks, scrolling and dragging the seek
-and volume bars are supported.
+The Keys panel keeps the same two-column layout across tabs. Press `?` for
+detailed help. Mouse clicks, scrolling and dragging the seek and volume bars
+are supported. Right-click a row to queue it, or middle-click to play it next.
 
 | Key | Action |
 | --- | --- |
 | `space` | Play or pause |
 | `n` / `p` | Next or previous track |
-| `j` / `k` | Move the selection |
+| `hjkl` / arrows | Move the selection or switch tabs |
+| `gg` / `G` | First or last row in the section |
+| `{` / `}` | Previous or next section |
 | `enter` | Play or open the selected row |
 | `1` to `7` | Home, Search, Library, Queue, Lyrics, Themes, Settings |
 | `/` | Find on the page or edit the search query |
-| `o` | Actions for the selected item |
-| `a` / `A` | Add to queue or play next |
+| `q` | Open Queue on the playing track |
+| `b` | Open the highlighted track album |
 | `K` / `J` in Queue | Move the selected entry up or down |
 | `r` | Start radio from a track |
-| `L` / `+` | Like the playing or selected track |
+| `+` | Like or unlike the highlighted track |
 | `s` / `R` | Shuffle or cycle repeat mode |
 | `-` / `=` / `m` | Lower volume, raise volume or mute |
-| `,` / `.` | Seek back or forward five seconds |
+| `,` / `.` | Jump back or forward five seconds |
 | `P` | Add to a playlist |
 | `e` | Open the equaliser |
+| `ctrl+r` | Reload the tab or retry failed playback |
 | `escape` | Back or close the current panel |
+| `tab` | Focus the account box or return to the page |
 | `Q` | Quit |
 
 See [the usage guide](docs/usage.md) for the full bindings, playlist edits,

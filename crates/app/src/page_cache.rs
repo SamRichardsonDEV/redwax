@@ -28,6 +28,27 @@ impl PageCache {
         let _ = crate::private_file::write(&self.cache_path(cache_key), page_json.as_bytes());
     }
 
+    /// A cached library belongs to the account that fetched it.
+    pub fn clear(&self) -> std::io::Result<()> {
+        let entries = match std::fs::read_dir(&self.cache_directory) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        for entry in entries {
+            let path = entry?.path();
+            if path.extension().is_some_and(|extension| extension == "json")
+                && path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .is_some_and(|stem| stem.len() == 40 && stem.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            {
+                std::fs::remove_file(path)?;
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn restore_track_metadata(&self, queued_tracks: &mut [redwax_ytm::Track]) {
         if !queued_tracks
             .iter()
@@ -90,6 +111,23 @@ mod tests {
         let directory = std::env::temp_dir().join(format!("redwax-pages-{}-{test_name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&directory);
         directory
+    }
+
+    #[test]
+    fn switching_account_removes_cached_pages_and_preserves_unrelated_files() {
+        let cache = PageCache::new(temporary_directory("clear-account"));
+        let page = CompletePage::try_from(Page::new("Old account", Vec::new())).unwrap();
+        cache.put("home", &page);
+        cache.put("library", &page);
+        let unrelated = cache.cache_directory.join("unrelated.json");
+        std::fs::write(&unrelated, "keep").unwrap();
+
+        cache.clear().unwrap();
+
+        assert!(cache.get("home").is_none());
+        assert!(cache.get("library").is_none());
+        assert_eq!(std::fs::read_to_string(unrelated).unwrap(), "keep");
+        std::fs::remove_dir_all(&cache.cache_directory).unwrap();
     }
 
     #[test]

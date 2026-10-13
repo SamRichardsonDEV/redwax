@@ -32,6 +32,11 @@ pub(crate) enum Completion {
 }
 
 impl Likes {
+    /// Keeping the revision prevents an old account completion from matching a new intent.
+    pub(crate) fn forget_account(&mut self) {
+        self.intents_by_video_id.clear();
+    }
+
     /// A remote mutation can already be accepted when cancellation reaches it.
     /// Serialize each track and reconcile only the newest desired value.
     pub(crate) fn desire(&mut self, track: Track, liked: bool, confirmed_liked: bool) -> Option<LikeRequest> {
@@ -104,6 +109,24 @@ mod tests {
             liked: false,
             playlist_entry: None,
         }
+    }
+
+    #[test]
+    fn an_old_account_completion_cannot_settle_a_new_account_intent() {
+        let mut likes = Likes::default();
+        let old_request = likes.desire(track(), true, false).unwrap();
+        likes.forget_account();
+        let new_request = likes.desire(track(), false, true).unwrap();
+
+        assert!(matches!(likes.complete(old_request, None), Completion::Obsolete));
+        assert!(matches!(
+            likes.complete(new_request, None),
+            Completion::Settled {
+                confirmed_liked: false,
+                error: None,
+                ..
+            }
+        ));
     }
 
     #[test]
