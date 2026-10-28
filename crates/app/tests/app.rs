@@ -3637,6 +3637,62 @@ async fn a_saved_login_without_an_identity_is_not_labelled_signed_out() {
 }
 
 #[tokio::test]
+async fn an_empty_saved_identity_refreshes_and_restores_the_account() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let mut app = Setup::new("login-empty-recovery").build();
+    let refreshes = Arc::new(AtomicUsize::new(0));
+    let calls = refreshes.clone();
+    app.app.deps.session_refresh = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    app.app.start_background();
+    loop {
+        match app.events.recv().await.expect("the identity check responds") {
+            AppEvent::AccountReady { request, .. } => {
+                app.app.handle_event(AppEvent::AccountReady {
+                    request,
+                    result: Ok(None),
+                });
+                break;
+            }
+            event => app.app.handle_event(event),
+        }
+    }
+    app.settle().await;
+
+    assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+    assert_eq!(app.app.account, "@sam");
+    assert!(app.header_row().contains("@sam"));
+    assert!(app.source.called("library"));
+}
+
+#[tokio::test]
+async fn an_empty_identity_after_refresh_does_not_repeat_the_import() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let mut setup = Setup::new("login-empty-after-refresh");
+    setup.source = Arc::new(FakeSource {
+        handle: None,
+        ..FakeSource::default()
+    });
+    let mut app = setup.build();
+    let refreshes = Arc::new(AtomicUsize::new(0));
+    let calls = refreshes.clone();
+    app.app.deps.session_refresh = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    app.app.start_background();
+    app.settle().await;
+
+    assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+    assert!(app.header_row().contains("Login unconfirmed"));
+    assert!(!app.header_row().contains("Sign in"));
+}
+
+#[tokio::test]
 async fn a_temporary_identity_failure_keeps_the_confirmed_account_visible() {
     let mut app = Harness::start("login-temporary-failure").await;
     let identity = app.app.account.clone();

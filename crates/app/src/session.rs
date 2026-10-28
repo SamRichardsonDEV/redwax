@@ -88,6 +88,10 @@ impl PreparedBrowserSession {
         &self.source
     }
 
+    pub fn has_selected_account(&self) -> bool {
+        self.account.is_some()
+    }
+
     pub fn select_account(&mut self, account: &Account) -> Result<(), String> {
         let selected_session = Session::new(
             self.session.cookie_header().to_owned(),
@@ -1114,6 +1118,7 @@ mod tests {
         let cookies = [test_cookie("SAPISID", "secret", ".youtube.com")];
         let prepared =
             prepare_cookie_snapshot(source, &cookies, Some(&remembered), &default_headers()).unwrap();
+        assert!(prepared.has_selected_account());
         assert_eq!(prepared.session().identity().authuser(), 1);
         for different in [
             BrowserSource {
@@ -1127,6 +1132,7 @@ mod tests {
         ] {
             let prepared =
                 prepare_cookie_snapshot(different, &cookies, Some(&remembered), &default_headers()).unwrap();
+            assert!(!prepared.has_selected_account());
             assert_eq!(prepared.session().identity().authuser(), 0);
             assert_eq!(prepared.session().identity().page_id(), None);
             assert_eq!(prepared.account, None);

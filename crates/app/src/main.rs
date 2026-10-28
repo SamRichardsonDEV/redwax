@@ -752,7 +752,9 @@ async fn run(config_path: Option<PathBuf>) -> Result<(), String> {
                     dump_dir: config::cache_dir().join("dumps"),
                     home_rows: config.home_rows,
                 });
-                choose_browser_account(&client, &mut prepared).await?;
+                if !prepared.has_selected_account() {
+                    choose_browser_account(&client, &mut prepared).await?;
+                }
                 let identity = client
                     .whoami()
                     .await
