@@ -3789,6 +3789,14 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                         self.login_state = LoginState::SignedIn;
                         self.load_page(Target::Library, Some("library".to_string()), false);
                     }
+                    Ok(_)
+                        if self.source.signed_in()
+                            && self.account.is_empty()
+                            && !retry_attempted
+                            && self.refresh_session(Some(Retry::Account(request_id))) =>
+                    {
+                        self.login_state = LoginState::Checking;
+                    }
                     Ok(_) => {
                         self.login_state = if self.source.signed_in() {
                             if self.account.is_empty() {
