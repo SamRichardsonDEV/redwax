@@ -149,6 +149,7 @@ impl Transport {
         }
 
         let url = endpoint_url(endpoint, continuation)?;
+        let authenticated = headers.contains_key("authorization");
         let response = self
             .client
             .post(url)
@@ -168,10 +169,11 @@ impl Transport {
                 http_status.as_u16()
             )));
         }
-        response
+        let response = response
             .json()
             .await
-            .map_err(|_| Error::Network(format!("{endpoint}: response was not JSON")))
+            .map_err(|_| Error::Network(format!("{endpoint}: response was not JSON")))?;
+        check_session(response, authenticated)
     }
 
     /// Follow `continuationItemRenderer` or `nextContinuationData` tokens
@@ -256,6 +258,26 @@ impl Transport {
             })
             .await;
         visitor_lookup.ok().cloned()
+    }
+}
+
+fn check_session(response: Value, authenticated: bool) -> Result<Value> {
+    // YouTube can reject expired cookies with HTTP 200 and no page contents.
+    let logged_out = response
+        .pointer("/responseContext/serviceTrackingParams")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|service| service.get("params").and_then(Value::as_array))
+        .flatten()
+        .any(|parameter| {
+            parameter.get("key").and_then(Value::as_str) == Some("logged_in")
+                && parameter.get("value").and_then(Value::as_str) == Some("0")
+        });
+    if authenticated && logged_out {
+        Err(Error::Rejected)
+    } else {
+        Ok(response)
     }
 }
 
@@ -487,6 +509,36 @@ fn civil_date(days: u64) -> (u64, u64, u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn successful_http_responses_can_reject_a_saved_session() {
+        let response = json!({
+            "responseContext": {"serviceTrackingParams": [
+                {"params": [{"key": "unrelated", "value": "0"}]},
+                {"params": [{"key": "logged_in", "value": "0"}]}
+            ]},
+            "microformat": {"microformatDataRenderer": {"noindex": true}}
+        });
+
+        assert!(matches!(
+            check_session(response.clone(), true),
+            Err(Error::Rejected)
+        ));
+        assert_eq!(check_session(response.clone(), false).unwrap(), response);
+    }
+
+    #[test]
+    fn missing_or_signed_in_tracking_does_not_reject_a_session() {
+        for response in [
+            json!({"contents": {}}),
+            json!({"responseContext": {"serviceTrackingParams": [{"params": [
+                {"key": "logged_in", "value": "1"},
+                {"key": "unrelated", "value": "0"}
+            ]}]}}),
+        ] {
+            assert_eq!(check_session(response.clone(), true).unwrap(), response);
+        }
+    }
 
     #[test]
     fn radio_continuation_uses_two_encoded_query_parameters() {

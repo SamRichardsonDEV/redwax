@@ -415,7 +415,10 @@ async fn signing_out_preserves_request_identity_against_a_queued_old_page() {
     gate.try_acquire()
         .expect("first page released the source gate")
         .forget();
-    app.app.handle_event(AppEvent::SessionLoggedOut { error: None });
+    app.app.handle_event(AppEvent::SessionLoggedOut {
+        error: None,
+        reauthenticate: false,
+    });
     app.app
         .load_page(redwax::app::Target::Home, Some("home".to_owned()), false);
     app.app.handle_event(stale_page);
@@ -439,7 +442,10 @@ async fn signed_out_reload_does_not_restore_account_pages_from_the_cache() {
     redwax::page_cache::PageCache::new(setup.config.page_cache_dir.clone())
         .put("home", &CompletePage::try_from(cached).unwrap());
     let mut app = setup.build();
-    app.app.handle_event(AppEvent::SessionLoggedOut { error: None });
+    app.app.handle_event(AppEvent::SessionLoggedOut {
+        error: None,
+        reauthenticate: false,
+    });
     app.app
         .load_page(redwax::app::Target::Home, Some("home".to_owned()), false);
     assert_eq!(app.app.home.top().unwrap().title, "Home");
@@ -1025,6 +1031,7 @@ async fn test_first_frame_needs_no_network() {
         saved: SavedState::default(),
         state_store: redwax::state::PlaybackStateStore::new(config.state_path.clone()),
         session_refresh: None,
+        session_generation: Default::default(),
         session_logout: None,
         account_access: None,
         config,
@@ -3669,7 +3676,7 @@ async fn an_empty_saved_identity_refreshes_and_restores_the_account() {
 }
 
 #[tokio::test]
-async fn an_empty_identity_after_refresh_does_not_repeat_the_import() {
+async fn an_empty_identity_after_refresh_signs_out_without_repeating_the_import() {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     let mut setup = Setup::new("login-empty-after-refresh");
@@ -3688,8 +3695,9 @@ async fn an_empty_identity_after_refresh_does_not_repeat_the_import() {
     app.settle().await;
 
     assert_eq!(refreshes.load(Ordering::SeqCst), 1);
-    assert!(app.header_row().contains("Login unconfirmed"));
-    assert!(!app.header_row().contains("Sign in"));
+    assert!(app.header_row().contains("Sign in"));
+    assert!(app.app.account.is_empty());
+    assert!(app.app.account_picker_visible());
 }
 
 #[tokio::test]
@@ -3717,10 +3725,270 @@ async fn a_temporary_identity_failure_keeps_the_confirmed_account_visible() {
     assert_eq!(app.app.account, identity);
     assert!(app.header_row().contains(&identity));
     assert!(!app.header_row().contains("Sign in"));
-    app.app.handle_event(AppEvent::SessionLoggedOut { error: None });
+    app.app.handle_event(AppEvent::SessionLoggedOut {
+        error: None,
+        reauthenticate: false,
+    });
     app.draw();
     assert!(app.header_row().contains("Sign in"));
     assert!(app.app.account.is_empty());
+}
+
+async fn next_identity_request(app: &mut Harness) -> redwax::app::RequestId {
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            match app.events.recv().await.expect("the identity check responds") {
+                AppEvent::AccountReady { request, .. } => break request,
+                event => app.app.handle_event(event),
+            }
+        }
+    })
+    .await
+    .expect("the identity check finishes")
+}
+
+#[tokio::test]
+async fn a_failed_browser_refresh_cleans_up_and_prompts_for_sign_in() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let mut setup = Setup::new("login-refresh-failed");
+    setup.source = Arc::new(FakeSource {
+        handle: None,
+        ..FakeSource::default()
+    });
+    let mut app = setup.build();
+    let refreshes = Arc::new(AtomicUsize::new(0));
+    let calls = refreshes.clone();
+    app.app.deps.session_refresh = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Err("Browser is signed out".to_owned())
+    }));
+    let logouts = Arc::new(AtomicUsize::new(0));
+    let calls = logouts.clone();
+    app.app.deps.session_logout = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    app.app.start_background();
+    app.settle().await;
+
+    assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+    assert_eq!(logouts.load(Ordering::SeqCst), 1);
+    assert!(app.app.account.is_empty());
+    assert!(app.header_row().contains("Sign in"));
+    assert!(app.app.account_picker_visible());
+    assert!(app.app.home.top().unwrap().is_empty());
+    assert!(app.app.library.top().unwrap().is_empty());
+    assert!(app.cached("home").is_none());
+    assert!(app.app.notifications.iter().any(|notice| {
+        notice.text.contains("Sign in to YouTube Music in your browser")
+            && notice.text.contains("redwax login")
+    }));
+}
+
+#[tokio::test]
+async fn a_rejected_refreshed_account_signs_out_without_another_import() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let mut app = Setup::new("login-retry-rejected").build();
+    let refreshes = Arc::new(AtomicUsize::new(0));
+    let calls = refreshes.clone();
+    app.app.deps.session_refresh = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    let logouts = Arc::new(AtomicUsize::new(0));
+    let calls = logouts.clone();
+    app.app.deps.session_logout = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    app.app.start_background();
+    for _ in 0..2 {
+        let request = next_identity_request(&mut app).await;
+        app.app.handle_event(AppEvent::AccountReady {
+            request,
+            result: Err(redwax_ytm::Error::Rejected),
+        });
+    }
+    app.settle().await;
+
+    assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+    assert_eq!(logouts.load(Ordering::SeqCst), 1);
+    assert!(app.app.account_picker_visible());
+    assert!(app.header_row().contains("Sign in"));
+}
+
+#[tokio::test]
+async fn a_rejected_page_retries_once_before_signing_out() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let mut app = Harness::start("page-retry-rejected").await;
+    let refreshes = Arc::new(AtomicUsize::new(0));
+    let calls = refreshes.clone();
+    app.app.deps.session_refresh = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    let logouts = Arc::new(AtomicUsize::new(0));
+    let calls = logouts.clone();
+    app.app.deps.session_logout = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    app.app
+        .load_page(redwax::app::Target::Home, Some("home".to_owned()), true);
+    for _ in 0..2 {
+        loop {
+            match app.events.recv().await.expect("the page responds") {
+                AppEvent::PageReady {
+                    target: redwax::app::Target::Home,
+                    request,
+                    ..
+                } => {
+                    app.app.handle_event(AppEvent::PageFailed {
+                        target: redwax::app::Target::Home,
+                        request,
+                        error: "Session rejected".to_owned(),
+                        rejected: true,
+                    });
+                    break;
+                }
+                event => app.app.handle_event(event),
+            }
+        }
+    }
+    app.settle().await;
+
+    assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+    assert_eq!(logouts.load(Ordering::SeqCst), 1);
+    assert!(app.app.account.is_empty());
+    assert!(app.app.account_picker_visible());
+}
+
+#[tokio::test]
+async fn a_rejected_playlist_continuation_refreshes_once_before_signing_out() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let mut setup = Setup::new("continuation-retry-rejected");
+    setup.source = Arc::new(FakeSource {
+        paged: Some(support::Paged::new(&[2, 2])),
+        continuation_rejected: true,
+        ..FakeSource::default()
+    });
+    let mut app = setup.build();
+    let refreshes = Arc::new(AtomicUsize::new(0));
+    let calls = refreshes.clone();
+    app.app.deps.session_refresh = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    let logouts = Arc::new(AtomicUsize::new(0));
+    let calls = logouts.clone();
+    app.app.deps.session_logout = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }));
+    app.draw();
+    app.app.start_background();
+    app.settle().await;
+    app.press_all(&TO_PLAYLIST).await;
+
+    assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+    assert_eq!(logouts.load(Ordering::SeqCst), 1);
+    assert!(app.app.account.is_empty());
+    assert!(app.app.account_picker_visible());
+    assert!(app.cached(PLAYLIST_KEY).is_none());
+}
+
+#[tokio::test]
+async fn pending_logout_ignores_duplicate_recovery_and_stale_identity() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let mut app = Setup::new("logout-ignores-stale-recovery").build();
+    app.app.start_background();
+    let stale_request = next_identity_request(&mut app).await;
+    let logouts = Arc::new(AtomicUsize::new(0));
+    let calls = logouts.clone();
+    let (release, released) = std::sync::mpsc::channel();
+    let released = std::sync::Mutex::new(released);
+    app.app.deps.session_logout = Some(Arc::new(move || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        released.lock().unwrap().recv().unwrap();
+        Ok(())
+    }));
+    for _ in 0..2 {
+        app.app.handle_event(AppEvent::SessionRefreshed {
+            error: Some("Session recovery failed".to_owned()),
+            retry: None,
+        });
+    }
+    app.app.handle_event(AppEvent::SessionRefreshed {
+        error: None,
+        retry: None,
+    });
+    app.app.handle_event(AppEvent::AccountReady {
+        request: stale_request,
+        result: Ok(Some("@old-account".to_owned())),
+    });
+    app.draw();
+    assert!(app.app.account.is_empty());
+    assert!(app.header_row().contains("Sign in"));
+    app.press_all(&["tab", "enter"]).await;
+    assert!(!app.app.account_picker_visible());
+    release.send(()).unwrap();
+    app.settle().await;
+
+    assert_eq!(logouts.load(Ordering::SeqCst), 1);
+    assert!(app.app.account.is_empty());
+    assert!(app.app.account_picker_visible());
+}
+
+#[tokio::test]
+async fn choosing_an_account_after_automatic_logout_signs_in_again() {
+    struct BrowserLogin;
+
+    impl redwax::session::AccountAccess for BrowserLogin {
+        fn accounts(&self) -> Result<Vec<redwax_ytm::Account>, String> {
+            Ok(vec![redwax_ytm::Account {
+                authuser: 0,
+                page_id: None,
+                name: "Renewed account".to_owned(),
+                handle: Some("@renewed".to_owned()),
+            }])
+        }
+
+        fn switch(&self, account: redwax_ytm::Account) -> Result<String, String> {
+            Ok(account.handle.unwrap())
+        }
+    }
+
+    let mut app = Harness::start("login-after-expiry").await;
+    let stale_generation = app
+        .app
+        .deps
+        .session_generation
+        .load(std::sync::atomic::Ordering::SeqCst);
+    app.app.deps.account_access = Some(Arc::new(BrowserLogin));
+    app.app.handle_event(AppEvent::SessionRefreshed {
+        error: Some("Session recovery failed".to_owned()),
+        retry: None,
+    });
+    app.settle().await;
+    assert!(app.app.account_picker_visible());
+    assert!(app.app.account.is_empty());
+    app.press("enter").await;
+
+    assert_eq!(app.app.account, "@renewed");
+    assert!(app.header_row().contains("@renewed"));
+    assert!(!app.app.account_picker_visible());
+    assert!(!app.app.library.top().unwrap().is_empty());
+    app.app.handle_event(AppEvent::SessionExpired {
+        generation: stale_generation,
+    });
+    app.settle().await;
+    assert_eq!(app.app.account, "@renewed");
+    assert!(!app.app.account_picker_visible());
 }
 
 #[tokio::test]

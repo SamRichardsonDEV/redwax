@@ -10,7 +10,7 @@ use std::io::{self, Stdout, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -403,7 +403,18 @@ fn session_refresher(
     let runtime_handle = tokio::runtime::Handle::current();
     let logout_runtime_handle = runtime_handle.clone();
     let import_session: SessionRefresh = Arc::new(move || {
-        let refreshed_session = session::prepare_from_browser(&config, None, None)?.publish(&config)?;
+        let prepared = session::prepare_from_browser(&config, None, None)?;
+        let client = Client::new(ClientOptions {
+            session: Some(prepared.session().clone()),
+            dump_dir: config::cache_dir().join("dumps"),
+            home_rows: config.home_rows,
+        });
+        let identity = runtime_handle
+            .block_on(client.whoami())
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "YouTube did not confirm the browser login".to_owned())?;
+        prepared.confirm_account(&identity)?;
+        let refreshed_session = prepared.publish(&config)?;
         if let Some(resolver) = &resolver {
             runtime_handle.block_on(resolver.reload_credentials(Some(refreshed_session.identity().clone())));
         }
@@ -627,6 +638,8 @@ fn restore_terminal() {
 struct Streams {
     resolver: Resolver,
     refresh_session: Option<SessionRefresh>,
+    events: Option<tokio::sync::mpsc::UnboundedSender<AppEvent>>,
+    session_generation: Arc<AtomicU64>,
 }
 
 const YTDLP_FALLBACK_WARNING: &str = "Using slower yt-dlp fallback. Run `redwax doctor --live`.";
@@ -645,16 +658,24 @@ async fn resolve_with_refresh(
     initial_resolution: impl Future<Output = redwax_resolve::Result<Stream>>,
     credential_refresh: impl Future<Output = bool>,
     native_resolution_retry: impl Future<Output = redwax_resolve::Result<Stream>>,
+    session_expired: impl Future<Output = ()>,
 ) -> redwax_resolve::Result<Stream> {
     let initial_failure = match initial_resolution.await {
         Ok(stream) => return Ok(stream),
         Err(initial_failure) => initial_failure,
     };
-    if initial_failure.kind() == redwax_resolve::FailureKind::AuthenticationRejected
-        && credential_refresh.await
-        && let Ok(stream) = native_resolution_retry.await
-    {
-        return Ok(stream);
+    if initial_failure.kind() == redwax_resolve::FailureKind::AuthenticationRejected {
+        if !credential_refresh.await {
+            session_expired.await;
+        } else {
+            match native_resolution_retry.await {
+                Ok(stream) => return Ok(stream),
+                Err(error) if error.kind() == redwax_resolve::FailureKind::AuthenticationRejected => {
+                    session_expired.await;
+                }
+                Err(_) => {}
+            }
+        }
     }
     Err(initial_failure)
 }
@@ -665,6 +686,7 @@ impl StreamSource for Streams {
     }
 
     async fn resolve(&self, video_id: &str) -> Result<Option<Playable>, String> {
+        let generation = self.session_generation.load(Ordering::SeqCst);
         let credential_refresh = async {
             let Some(import_session) = self.refresh_session.clone() else {
                 return false;
@@ -685,6 +707,11 @@ impl StreamSource for Streams {
                 self.resolver.resolve(video_id),
                 credential_refresh,
                 native_resolution_retry,
+                async {
+                    if let Some(events) = &self.events {
+                        let _ = events.send(AppEvent::SessionExpired { generation });
+                    }
+                },
             ),
         )
         .await
@@ -802,6 +829,8 @@ async fn run(config_path: Option<PathBuf>) -> Result<(), String> {
             initial_session.as_ref(),
         )))
     };
+    let (app_event_sender, mut app_events) = tokio::sync::mpsc::unbounded_channel();
+    let session_generation = Arc::new(AtomicU64::new(0));
     let (refresh_session, log_out, session_coordinator) =
         session_refresher(&config, music_source.clone(), resolver.clone());
     let account_access = Arc::new(session::BrowserAccountAccess::new(
@@ -822,6 +851,7 @@ async fn run(config_path: Option<PathBuf>) -> Result<(), String> {
         state_store: redwax::state::PlaybackStateStore::new(config.state_path.clone()),
         session_logout: Some(log_out),
         session_refresh: Some(refresh_session.clone()),
+        session_generation: session_generation.clone(),
         account_access: Some(account_access),
         config,
     };
@@ -832,12 +862,13 @@ async fn run(config_path: Option<PathBuf>) -> Result<(), String> {
             Some(Streams {
                 resolver,
                 refresh_session: Some(refresh_session.clone()),
+                events: Some(app_event_sender.clone()),
+                session_generation,
             }),
         ),
         None => Player::new::<Streams>(player_options, None),
     };
 
-    let (app_event_sender, mut app_events) = tokio::sync::mpsc::unbounded_channel();
     let mut app = App::new(
         music_source.clone(),
         player.clone(),
@@ -1166,6 +1197,8 @@ mod stream_tests {
                 cache_dir: cache_dir.clone(),
             }),
             refresh_session: None,
+            events: None,
+            session_generation: Default::default(),
         };
         for (name, bytes) in [
             ("selected", future_size(|| streams.resolve("synthetic"))),
@@ -1192,6 +1225,7 @@ mod stream_tests {
             async { Ok(native_stream()) },
             async { panic!("successful playback must not refresh cookies") },
             async { panic!("successful playback must not repeat resolution") },
+            async { panic!("successful playback must not log out") },
         )
         .await
         .expect("native playback succeeds");
@@ -1202,6 +1236,7 @@ mod stream_tests {
     async fn cookie_recovery_runs_the_full_chain_once_and_retries_only_native() {
         let full_chains = AtomicUsize::new(0);
         let native_retries = AtomicUsize::new(0);
+        let logouts = AtomicUsize::new(0);
         let first = async {
             full_chains.fetch_add(1, Ordering::SeqCst);
             Err(Error::Failed(redwax_resolve::Failure {
@@ -1216,24 +1251,38 @@ mod stream_tests {
                 evidence: "synthetic rejection".to_owned(),
             }))
         };
-        assert!(resolve_with_refresh(first, async { true }, native).await.is_err());
+        assert!(
+            resolve_with_refresh(first, async { true }, native, async {
+                logouts.fetch_add(1, Ordering::SeqCst);
+            })
+            .await
+            .is_err()
+        );
         assert_eq!(full_chains.load(Ordering::SeqCst), 1);
         assert_eq!(native_retries.load(Ordering::SeqCst), 1);
+        assert_eq!(logouts.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
     async fn a_failed_cookie_refresh_does_not_repeat_resolution() {
+        let logouts = AtomicUsize::new(0);
         let first = async {
             Err(Error::Failed(redwax_resolve::Failure {
                 kind: redwax_resolve::FailureKind::AuthenticationRejected,
                 evidence: "synthetic rejection".to_owned(),
             }))
         };
-        let result = resolve_with_refresh(first, async { false }, async {
-            panic!("failed cookie refresh must not repeat resolution")
-        })
+        let result = resolve_with_refresh(
+            first,
+            async { false },
+            async { panic!("failed cookie refresh must not repeat resolution") },
+            async {
+                logouts.fetch_add(1, Ordering::SeqCst);
+            },
+        )
         .await;
         assert!(result.is_err());
+        assert_eq!(logouts.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
@@ -1252,6 +1301,7 @@ mod stream_tests {
                 },
                 async { panic!("unrelated failures must not refresh credentials") },
                 async { panic!("unrelated failures must not repeat resolution") },
+                async { panic!("unrelated failures must not log out") },
             )
             .await;
             assert!(matches!(result, Err(Error::Failed(failure)) if failure.kind == kind));
@@ -1269,10 +1319,29 @@ mod stream_tests {
             },
             async { true },
             async { Err(Error::Io(std::io::Error::other("temporary network failure"))) },
+            async { panic!("a network failure after refresh must not log out") },
         )
         .await;
         assert!(
             matches!(result, Err(Error::Failed(failure)) if failure.kind == redwax_resolve::FailureKind::AuthenticationRejected && failure.evidence == "synthetic rejection")
         );
+    }
+
+    #[tokio::test]
+    async fn refreshed_playback_succeeds_without_logging_out() {
+        let stream = resolve_with_refresh(
+            async {
+                Err(Error::Failed(redwax_resolve::Failure {
+                    kind: redwax_resolve::FailureKind::AuthenticationRejected,
+                    evidence: "synthetic rejection".to_owned(),
+                }))
+            },
+            async { true },
+            async { Ok(native_stream()) },
+            async { panic!("recovered playback must not log out") },
+        )
+        .await
+        .expect("the refreshed session resolves audio");
+        assert_eq!(stream.source, Source::NativeSignedIn);
     }
 }

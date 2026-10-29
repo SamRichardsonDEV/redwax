@@ -2,6 +2,7 @@
 //! The cache-backed first frame precedes mpv, MPRIS, network requests, and library sync.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -387,6 +388,10 @@ pub enum AppEvent {
     },
     SessionLoggedOut {
         error: Option<String>,
+        reauthenticate: bool,
+    },
+    SessionExpired {
+        generation: u64,
     },
     LyricsReady {
         request: RequestId,
@@ -462,6 +467,7 @@ pub enum AppEvent {
 pub enum Retry {
     Account(RequestId),
     Page(Target, RequestId),
+    Session(u64),
 }
 
 /// Re-imports the session from Firefox and reloads the client. Blocking, so
@@ -637,6 +643,7 @@ pub struct Deps {
     pub state_store: crate::state::PlaybackStateStore,
     pub session_refresh: Option<SessionRefresh>,
     pub session_logout: Option<SessionLogout>,
+    pub session_generation: Arc<AtomicU64>,
     pub account_access: Option<Arc<dyn crate::session::AccountAccess>>,
 }
 
@@ -727,6 +734,7 @@ pub struct App<S: MusicSource, P: PlayerControl> {
     account_choices_request: RequestSlot<()>,
     account_change_request: RequestSlot<()>,
     session_logged_out: bool,
+    session_logout_pending: bool,
     /// What each browser last asked for, so a refused fetch can be reissued.
     page_requests: HashMap<Target, RequestSlot<PageFetch>>,
     prefetch_requests: HashMap<String, RequestSlot<()>>,
@@ -968,6 +976,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             account_choices_request: RequestSlot::default(),
             account_change_request: RequestSlot::default(),
             session_logged_out: false,
+            session_logout_pending: false,
             page_requests: HashMap::new(),
             prefetch_requests: HashMap::new(),
             page_loaders: HashMap::new(),
@@ -1087,7 +1096,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         });
     }
 
-    /// Re-import the session from Firefox on a blocking task. Each request
+    /// Re-import the browser session on a blocking task. Each request
     /// records whether it already used this recovery path, while the shared
     /// session coordinator coalesces refreshes across request kinds.
     fn refresh_session(&mut self, retry: Option<Retry>) -> bool {
@@ -1097,6 +1106,11 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let Some(refresh_session) = self.deps.session_refresh.clone() else {
             return false;
         };
+        let retry = retry.or_else(|| {
+            Some(Retry::Session(
+                self.deps.session_generation.load(Ordering::SeqCst),
+            ))
+        });
         let event_sender = self.events.clone();
         self.background_tasks.spawn(async move {
             let refresh_task_result = tokio::task::spawn_blocking(move || refresh_session()).await;
@@ -1118,6 +1132,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             return;
         }
         let current_retry = match retry_intent {
+            Some(Retry::Session(generation)) => {
+                generation == self.deps.session_generation.load(Ordering::SeqCst)
+            }
             Some(Retry::Account(request)) => self.account_request.get(request).is_some(),
             Some(Retry::Page(target, request)) => self
                 .page_requests
@@ -1129,25 +1146,18 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             return;
         }
         if let Some(refresh_error) = refresh_error {
-            if matches!(retry_intent, Some(Retry::Account(_))) {
-                self.account.clear();
-                self.login_state = LoginState::SignedOut;
-            }
-            self.notify(
-                format!("{refresh_error}. YouTube rejected the session, run `redwax login`"),
-                Some("Signed out"),
-                Level::Warning,
-            );
+            self.notify(refresh_error, Some("Session recovery"), Level::Warning);
+            self.start_logout(true);
             return;
         }
-        self.notify("Session refreshed from firefox", None, Level::Info);
+        self.notify("Session refreshed from your browser", None, Level::Info);
         match retry_intent {
             Some(Retry::Account(request_id)) => self.retry_account(request_id),
             Some(Retry::Page(target, request_id)) => {
                 self.retry_fetch(target, request_id);
-                self.start_account();
+                self.start_account_request(true);
             }
-            None => self.start_account(),
+            Some(Retry::Session(_)) | None => self.start_account_request(true),
         }
     }
 
@@ -1214,9 +1224,13 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     }
 
     fn open_account_picker(&mut self) {
+        if self.session_logout_pending {
+            self.notify("Signing out. Please wait.", Some("Account"), Level::Info);
+            return;
+        }
         self.eq.hide();
         self.interaction.focus(PageFocus::Account);
-        let signed_in = self.source.signed_in();
+        let signed_in = self.source.signed_in() && !self.session_logged_out;
         self.open_overlay(Overlay::Accounts(ui::accounts::AccountPicker::loading(signed_in)));
         self.load_account_choices();
     }
@@ -1350,6 +1364,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     }
 
     fn cancel_account_reads(&mut self) {
+        self.deps.session_generation.fetch_add(1, Ordering::SeqCst);
         self.account_request.cancel();
         for request in self.page_requests.values_mut() {
             request.cancel();
@@ -2593,7 +2608,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             return;
         };
         if matches!(prompt, Prompt::Logout(_)) {
-            self.start_logout();
+            self.start_logout(false);
             return;
         }
         let Prompt::ClearQueue(prompt) = prompt else {
@@ -2639,8 +2654,23 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         )));
     }
 
-    fn start_logout(&mut self) {
+    fn start_logout(&mut self, reauthenticate: bool) {
+        if self.session_logged_out {
+            return;
+        }
+        self.session_logged_out = true;
+        self.session_logout_pending = true;
+        self.cancel_account_reads();
+        self.account_choices_request.cancel();
+        self.account_change_request.cancel();
+        self.account.clear();
+        self.login_state = LoginState::SignedOut;
+        self.close_overlay();
         let Some(logout_session) = self.deps.session_logout.clone() else {
+            self.handle_event(AppEvent::SessionLoggedOut {
+                error: None,
+                reauthenticate,
+            });
             return;
         };
         let event_sender = self.events.clone();
@@ -2651,7 +2681,10 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 Ok(Err(error)) => Some(error),
                 Err(_) => Some("logout did not finish".to_string()),
             };
-            let _ = event_sender.send(AppEvent::SessionLoggedOut { error: logout_error });
+            let _ = event_sender.send(AppEvent::SessionLoggedOut {
+                error: logout_error,
+                reauthenticate,
+            });
         });
     }
 
@@ -3550,6 +3583,10 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 {
                     return;
                 }
+                if rejected {
+                    self.start_logout(true);
+                    return;
+                }
                 // A remembered page is still on screen, so a failure to refresh
                 // it is a warning and not an error.
                 let notification_level = match fetch_context.page_was_shown {
@@ -3719,7 +3756,16 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 ),
                 Err(error) => self.notify(error, Some("Playback"), Level::Error),
             },
-            AppEvent::SessionLoggedOut { error } => {
+            AppEvent::SessionExpired { generation } => {
+                if generation == self.deps.session_generation.load(Ordering::SeqCst) {
+                    self.start_logout(true);
+                }
+            }
+            AppEvent::SessionLoggedOut {
+                error,
+                reauthenticate,
+            } => {
+                self.session_logout_pending = false;
                 self.cancel_account_reads();
                 self.liked_overrides.clear();
                 self.like_intents.forget_account();
@@ -3745,6 +3791,14 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                         Level::Warning,
                     ),
                     None => self.notify("Signed out", Some("Account"), Level::Info),
+                }
+                if reauthenticate {
+                    self.open_account_picker();
+                    self.notify(
+                        "Automatic sign-in failed. Sign in to YouTube Music in your browser. Then choose an account here or run `redwax login`.",
+                        Some("Sign in again"),
+                        Level::Warning,
+                    );
                 }
             }
             AppEvent::LyricsReady {
@@ -3780,6 +3834,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 request: request_id,
                 result: account_result,
             } => {
+                if self.session_logged_out {
+                    return;
+                }
                 let Some(retry_attempted) = self.account_request.complete(request_id).copied() else {
                     return;
                 };
@@ -3796,6 +3853,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                             && self.refresh_session(Some(Retry::Account(request_id))) =>
                     {
                         self.login_state = LoginState::Checking;
+                    }
+                    Ok(_) if self.source.signed_in() && retry_attempted => {
+                        self.start_logout(true);
                     }
                     Ok(_) => {
                         self.login_state = if self.source.signed_in() {
@@ -3815,14 +3875,13 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                         self.login_state = if self.refresh_session(Some(Retry::Account(request_id))) {
                             LoginState::Checking
                         } else {
-                            self.notify("YouTube rejected the session", Some("Account"), Level::Error);
+                            self.start_logout(true);
                             LoginState::SignedOut
                         };
                     }
                     Err(error) => {
                         if matches!(error, redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) {
-                            self.account.clear();
-                            self.login_state = LoginState::SignedOut;
+                            self.start_logout(true);
                         } else if self.account.is_empty() {
                             self.login_state = LoginState::Unconfirmed;
                         }
@@ -4192,6 +4251,18 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             Err(error) => {
                 self.page_loaders.remove(&target);
                 self.playback.stop_page_tail(&cache_key);
+                if matches!(error, redwax_ytm::Error::Rejected) {
+                    let retry_attempted = self
+                        .page_requests
+                        .get(&target)
+                        .and_then(|slot| slot.get(request_id))
+                        .is_none_or(|context| context.retry_attempted);
+                    if !retry_attempted && self.refresh_session(Some(Retry::Page(target, request_id))) {
+                        return;
+                    }
+                    self.start_logout(true);
+                    return;
+                }
                 self.notify(
                     format!("Only part of this page loaded: {error}. Reload the page to try again."),
                     Some("YouTube Music"),

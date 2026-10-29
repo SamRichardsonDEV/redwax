@@ -259,12 +259,20 @@ imports only when YouTube rejects the session already loaded by that process.
 
 ### Session refresh
 
-Google can rotate a browser session while redwax keeps an older exported copy. A typed session rejection
-from an account read, page read, radio fetch, or signed-in resolve can start one
-shared import from the remembered browser and profile. Account and page reads retry once after a successful
-import. Redwax does not automatically replay an ambiguous playlist or library
-mutation. In-app Sign out blocks further automatic imports for the rest of the
-run. When recovery cannot help, redwax says so and names `redwax login`.
+Google can rotate a browser session while redwax keeps an older exported copy.
+A rejected session starts one shared import from the remembered browser and
+profile. This includes a signed-out response sent with HTTP 200. Account and
+page reads retry once after a successful import.
+
+If the import fails or YouTube rejects the refreshed login, redwax signs out,
+removes its saved credentials and opens the account picker. Sign in to YouTube
+Music in your browser, then refresh the browser logins and choose an account.
+You can also run `redwax login` and restart redwax. An ordinary page or playback
+network failure does not start recovery or sign you out.
+
+Redwax does not automatically replay an ambiguous playlist or library mutation.
+Sign out blocks further automatic imports until you choose an account again.
+Playback and personal files remain in place.
 
 ### `redwax sync`
 

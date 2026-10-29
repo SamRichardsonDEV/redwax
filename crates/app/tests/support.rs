@@ -231,6 +231,7 @@ pub struct FakeSource {
     /// Refuse every playlist edit, for the path that puts the row back.
     pub edits_fail: bool,
     pub continuation_fails: bool,
+    pub continuation_rejected: bool,
     pub continuation_repeats: bool,
 }
 
@@ -249,6 +250,7 @@ impl Default for FakeSource {
             lengths: None,
             edits_fail: false,
             continuation_fails: false,
+            continuation_rejected: false,
             continuation_repeats: false,
         }
     }
@@ -411,6 +413,9 @@ impl MusicSource for FakeSource {
         }
         if self.continuation_fails {
             return Err(redwax_ytm::Error::Network("fixture continuation failed".into()));
+        }
+        if self.continuation_rejected {
+            return Err(redwax_ytm::Error::Rejected);
         }
         let batch: usize = continuation
             .token
@@ -1139,6 +1144,7 @@ impl Setup {
             saved: self.saved,
             state_store: redwax::state::PlaybackStateStore::new(self.config.state_path.clone()),
             session_refresh: None,
+            session_generation: Default::default(),
             session_logout: None,
             account_access: None,
             config: self.config,
