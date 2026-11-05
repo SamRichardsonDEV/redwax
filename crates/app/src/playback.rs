@@ -1193,6 +1193,23 @@ impl<P: PlayerControl> PlayerControl for Playback<P> {
         self.inner.player.jump(queue_index).await
     }
 
+    async fn jump_entry(
+        &self,
+        queue_entry_id: QueueEntryId,
+        queue_revision: QueueRevision,
+    ) -> Result<QueueEdit> {
+        let visible_state = self.snapshot();
+        if visible_state.queue_revision != queue_revision
+            || visible_state
+                .queue_entries
+                .iter()
+                .all(|entry| entry.id() != queue_entry_id)
+        {
+            return Ok(QueueEdit::Stale);
+        }
+        self.inner.player.jump_entry(queue_entry_id, queue_revision).await
+    }
+
     async fn remove(&self, queue_index: usize) -> Result<()> {
         let _edit_guard = self.inner.queue_edits.lock().await;
         self.stop_producer();

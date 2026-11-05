@@ -6,12 +6,13 @@
 //! not a preview pane, because the preview is the app.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Margin, Rect};
 use ratatui::style::{Modifier, Style};
 
 use crate::theme::Theme;
 use crate::themes::Entry;
 use crate::ui::hit::Hit;
+use crate::ui::popup;
 use crate::ui::{clip, fill, mix, put, span};
 
 /// Cells the name column takes, so the swatches of every row line up.
@@ -38,11 +39,12 @@ pub struct ThemesView<'a> {
 
 pub fn themes(buffer: &mut Buffer, area: Rect, view: ThemesView<'_>) -> Vec<(Rect, Hit)> {
     let theme = view.theme;
-    fill(buffer, area, theme.background);
+    popup::frame(buffer, area, theme.background, theme.muted);
     if area.width < 24 || area.height < 4 {
         return Vec::new();
     }
-    let content_area = Rect::new(area.x + 2, area.y + 1, area.width - 4, area.height - 1);
+    let content_area = popup::inner(area);
+    let row_bounds = area.inner(Margin::new(1, 1));
     let muted = Style::new().fg(theme.muted);
 
     put(
@@ -80,7 +82,7 @@ pub fn themes(buffer: &mut Buffer, area: Rect, view: ThemesView<'_>) -> Vec<(Rec
     {
         let theme_index = first_visible_index + visible_theme_offset;
         let row_y = first_theme_row_y + visible_theme_offset as u16;
-        let row_area = Rect::new(area.x, row_y, area.width, 1);
+        let row_area = Rect::new(row_bounds.x, row_y, row_bounds.width, 1);
         if theme_index == view.cursor {
             fill(buffer, row_area, mix(theme.panel, theme.background, 0.2));
         }

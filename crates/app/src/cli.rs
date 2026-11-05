@@ -7,6 +7,10 @@ pub enum Command {
     Run {
         config: Option<PathBuf>,
     },
+    Mini {
+        config: Option<PathBuf>,
+        player: Option<String>,
+    },
     Setup {
         config: Option<PathBuf>,
     },
@@ -43,13 +47,17 @@ pub fn parse(
     let mut browser_name = None;
     let mut account_query = None;
     let mut list_accounts = false;
+    let mut mini_player = None;
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--help" | "-h" => return Ok(Command::Help),
             "--version" | "-V" if subcommand.is_none() => return Ok(Command::Version),
             "--config" => config_path = Some(argument_value("--config", &mut arguments)?.into()),
-            "setup" | "doctor" | "login" | "sync" | "logout" if subcommand.is_none() => {
+            "setup" | "doctor" | "login" | "sync" | "logout" | "mini" if subcommand.is_none() => {
                 subcommand = Some(argument)
+            }
+            "--player" if subcommand.as_deref() == Some("mini") => {
+                mini_player = Some(argument_value("--player", &mut arguments)?);
             }
             "--live" if subcommand.as_deref() == Some("doctor") => run_live_checks = true,
             "--dry-run" if subcommand.as_deref() == Some("sync") => is_dry_run = true,
@@ -73,6 +81,10 @@ pub fn parse(
         }
     }
     Ok(match subcommand.as_deref() {
+        Some("mini") => Command::Mini {
+            config: config_path,
+            player: mini_player,
+        },
         Some("setup") => Command::Setup { config: config_path },
         Some("doctor") => Command::Doctor {
             config: config_path,

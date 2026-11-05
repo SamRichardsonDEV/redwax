@@ -9,7 +9,7 @@ pub mod ipc;
 #[cfg(test)]
 mod tests;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -151,6 +151,10 @@ pub struct PlayerState {
     pub tier_label: Option<String>,
     /// A warning attached to the selected stream, for the interface to show once.
     pub warning: Option<String>,
+    /// Every file start has a distinct sequence, including repeat and recovery.
+    pub playback_sequence: u64,
+    /// Recent full plays survive coalesced watch updates. Each sequence appears once.
+    pub completed_tracks: VecDeque<(u64, Track)>,
 }
 
 impl Default for PlayerState {
@@ -173,6 +177,8 @@ impl Default for PlayerState {
             error: None,
             tier_label: None,
             warning: None,
+            playback_sequence: 0,
+            completed_tracks: VecDeque::new(),
         }
     }
 }
@@ -256,6 +262,25 @@ pub trait PlayerControl: Clone + Send + Sync + 'static {
     fn enqueue(&self, tracks: Vec<Track>, play_next: bool) -> impl Future<Output = Result<()>> + Send;
     fn replace_upcoming(&self, tracks: Vec<Track>) -> impl Future<Output = Result<()>> + Send;
     fn jump(&self, index: usize) -> impl Future<Output = Result<()>> + Send;
+    fn jump_entry(
+        &self,
+        logical_entry_id: QueueEntryId,
+        queue_revision: QueueRevision,
+    ) -> impl Future<Output = Result<QueueEdit>> + Send {
+        async move {
+            let state = self.snapshot();
+            let Some(index) = state
+                .queue_entries
+                .iter()
+                .position(|entry| entry.id() == logical_entry_id)
+                .filter(|_| state.queue_revision == queue_revision)
+            else {
+                return Ok(QueueEdit::Stale);
+            };
+            self.jump(index).await?;
+            Ok(QueueEdit::Applied)
+        }
+    }
     fn remove(&self, index: usize) -> impl Future<Output = Result<()>> + Send;
     fn remove_entry(
         &self,
@@ -569,6 +594,12 @@ impl EntryReplacement {
             if bookkeeping.playing_mpv_entry_id == Some(self.old_mpv_entry_id) {
                 bookkeeping.playing_mpv_entry_id = Some(mpv_entry_id);
             }
+            if let Some(playback) = bookkeeping.full_playback.as_mut()
+                && (playback.mpv_entry_id == self.old_mpv_entry_id || playback.mpv_entry_id == mpv_entry_id)
+            {
+                playback.mpv_entry_id = mpv_entry_id;
+                playback.track = Some(self.track.clone());
+            }
         }
         if replacement.is_none()
             && let Some(inserted_mpv_entry_id) = self.inserted_mpv_entry_id
@@ -744,6 +775,23 @@ enum RecoveryStage {
     FinalFallback,
 }
 
+/// Only a loaded, uninterrupted playback can become a full play at natural EOF.
+struct FullPlayback {
+    mpv_entry_id: i64,
+    sequence: u64,
+    track: Option<Track>,
+    loaded: bool,
+}
+
+impl FullPlayback {
+    fn complete(self, reason: &str) -> Option<(u64, Track)> {
+        if reason != "eof" || !self.loaded {
+            return None;
+        }
+        self.track.map(|track| (self.sequence, track))
+    }
+}
+
 /// The part of the player mpv's events read and write that is not in
 /// `PlayerState`, kept behind one lock so an event applies as a whole.
 struct PlayerBookkeeping {
@@ -776,6 +824,7 @@ struct PlayerBookkeeping {
     fallback_cancel_acknowledgements: HashMap<String, (String, oneshot::Sender<()>)>,
     playback_timing: Option<PlaybackTiming>,
     playing_mpv_entry_id: Option<i64>,
+    full_playback: Option<FullPlayback>,
     paused_for_cache: bool,
     core_idle: bool,
     loop_file: bool,
@@ -816,6 +865,7 @@ impl Default for PlayerBookkeeping {
             fallback_cancel_acknowledgements: HashMap::new(),
             playback_timing: None,
             playing_mpv_entry_id: None,
+            full_playback: None,
             paused_for_cache: false,
             // mpv is idle until it says otherwise, so a queue that never starts
             // reads as loading rather than as playing.
@@ -1122,6 +1172,57 @@ impl Player {
         let started_at = Instant::now();
         let playback_request_id = inner.reserve_playback();
         self.jump_reserved(index, playback_request_id, started_at).await
+    }
+
+    /// Validate the observed identity under the same lock as queue edits.
+    pub async fn jump_entry(
+        &self,
+        logical_entry_id: QueueEntryId,
+        queue_revision: QueueRevision,
+    ) -> Result<QueueEdit> {
+        let inner = &self.inner;
+        let started_at = Instant::now();
+        let previous_request_id = *inner
+            .current_playback_request_id
+            .lock()
+            .expect("playback request");
+        let queue_edit_guard = inner.queue_edit_lock.lock().await;
+        let Some((index, _)) = inner
+            .queue_entry_position(logical_entry_id, queue_revision)
+            .await?
+        else {
+            return Ok(QueueEdit::Stale);
+        };
+        let mpv_playlist = inner
+            .command(vec![json!("get_property"), json!("playlist")])
+            .await?;
+        let still_selected = {
+            let state = inner.state.borrow();
+            let bookkeeping = inner.bookkeeping.lock().expect("player bookkeeping state");
+            state.queue_revision == queue_revision
+                && mpv_playlist
+                    .as_array()
+                    .and_then(|entries| entries.get(index))
+                    .and_then(|entry| entry.get("id"))
+                    .and_then(Value::as_i64)
+                    .and_then(|mpv_entry_id| bookkeeping.logical_entry_ids_by_mpv_id.get(&mpv_entry_id))
+                    == Some(&logical_entry_id)
+        };
+        if !still_selected {
+            return Ok(QueueEdit::Stale);
+        }
+        let Some(playback_request_id) = inner.reserve_playback_if_current(previous_request_id) else {
+            return Ok(QueueEdit::Stale);
+        };
+        self.jump_from_playlist(
+            index,
+            playback_request_id,
+            queue_edit_guard,
+            mpv_playlist,
+            started_at,
+        )
+        .await?;
+        Ok(QueueEdit::Applied)
     }
 
     async fn jump_reserved(&self, index: usize, playback_request_id: u64, started_at: Instant) -> Result<()> {
@@ -1588,6 +1689,14 @@ impl PlayerControl for Player {
 
     async fn jump(&self, index: usize) -> Result<()> {
         Player::jump(self, index).await
+    }
+
+    async fn jump_entry(
+        &self,
+        logical_entry_id: QueueEntryId,
+        queue_revision: QueueRevision,
+    ) -> Result<QueueEdit> {
+        Player::jump_entry(self, logical_entry_id, queue_revision).await
     }
 
     async fn remove(&self, index: usize) -> Result<()> {
@@ -2320,6 +2429,16 @@ impl PlayerInner {
         *current_request_id
     }
 
+    /// A stale observed selection must not cancel a newer playback request.
+    fn reserve_playback_if_current(&self, previous_request_id: u64) -> Option<u64> {
+        let mut current_request_id = self.current_playback_request_id.lock().expect("playback request");
+        if *current_request_id != previous_request_id {
+            return None;
+        }
+        *current_request_id += 1;
+        Some(*current_request_id)
+    }
+
     fn playback_request_is_current(&self, playback_request_id: u64) -> bool {
         *self.current_playback_request_id.lock().expect("playback request") == playback_request_id
     }
@@ -2586,6 +2705,12 @@ impl PlayerInner {
     }
 
     async fn command(&self, command_arguments: Vec<Value>) -> Result<Value> {
+        if command_arguments.first().and_then(Value::as_str) == Some("seek") {
+            self.bookkeeping
+                .lock()
+                .expect("player bookkeeping state")
+                .full_playback = None;
+        }
         let _lifecycle_transition_guard = self.lifecycle.transition_lock.lock().await;
         let ipc = {
             let state = self.lifecycle.state.lock().expect("player lifecycle");
@@ -3348,7 +3473,68 @@ impl PlayerInner {
         self.handle_event(message);
     }
 
+    fn finish_full_playback(&self, mpv_entry_id: i64, sequence: Option<u64>, reason: &str) {
+        let completed = {
+            let mut bookkeeping = self.bookkeeping.lock().expect("player bookkeeping state");
+            if bookkeeping.full_playback.as_ref().is_some_and(|playback| {
+                playback.mpv_entry_id == mpv_entry_id
+                    && sequence.is_none_or(|sequence| playback.sequence == sequence)
+            }) {
+                bookkeeping.full_playback.take().and_then(|mut playback| {
+                    playback.track = playback
+                        .track
+                        .or_else(|| bookkeeping.tracks_by_mpv_entry_id.get(&mpv_entry_id).cloned());
+                    playback.complete(reason)
+                })
+            } else {
+                None
+            }
+        };
+        if let Some(completed) = completed {
+            self.state.send_modify(|state| {
+                state.completed_tracks.push_back(completed);
+                while state.completed_tracks.len() > 32 {
+                    state.completed_tracks.pop_front();
+                }
+            });
+        }
+    }
+
+    async fn confirm_full_playback_eof(self: Arc<Self>, mpv_entry_id: i64, sequence: u64) {
+        let _queue_edit_guard = self.queue_edit_lock.lock().await;
+        let Ok(playlist) = self.command(vec![json!("get_property"), json!("playlist")]).await else {
+            return;
+        };
+        let still_current = playlist.as_array().is_some_and(|entries| {
+            entries.iter().any(|entry| {
+                entry.get("id").and_then(Value::as_i64) == Some(mpv_entry_id)
+                    && entry.get("current").and_then(Value::as_bool) == Some(true)
+            })
+        });
+        if !still_current {
+            return;
+        }
+        let Ok(eof_reached) = self
+            .command(vec![json!("get_property"), json!("eof-reached")])
+            .await
+        else {
+            return;
+        };
+        if eof_reached.as_bool() == Some(true) {
+            self.finish_full_playback(mpv_entry_id, Some(sequence), "eof");
+        }
+    }
+
     fn handle_event(self: &Arc<Self>, message: &Value) {
+        if message.get("event").and_then(Value::as_str) == Some("end-file")
+            && let Some(mpv_entry_id) = message.get("playlist_entry_id").and_then(Value::as_i64)
+        {
+            self.finish_full_playback(
+                mpv_entry_id,
+                None,
+                message.get("reason").and_then(Value::as_str).unwrap_or_default(),
+            );
+        }
         match message.get("event").and_then(Value::as_str).unwrap_or_default() {
             "client-message" => {
                 let message_arguments = message.get("args").and_then(Value::as_array);
@@ -3402,17 +3588,58 @@ impl PlayerInner {
                 }
             }
             "start-file" => {
-                self.bookkeeping
-                    .lock()
-                    .expect("player bookkeeping state")
-                    .playing_mpv_entry_id = message.get("playlist_entry_id").and_then(Value::as_i64);
+                self.state.send_modify(|state| {
+                    state.playback_sequence = state
+                        .playback_sequence
+                        .checked_add(1)
+                        .expect("playback sequence exhausted");
+                    let mut bookkeeping = self.bookkeeping.lock().expect("player bookkeeping state");
+                    let mpv_entry_id = message.get("playlist_entry_id").and_then(Value::as_i64);
+                    bookkeeping.playing_mpv_entry_id = mpv_entry_id;
+                    bookkeeping.full_playback = mpv_entry_id.map(|mpv_entry_id| FullPlayback {
+                        mpv_entry_id,
+                        sequence: state.playback_sequence,
+                        track: bookkeeping.tracks_by_mpv_entry_id.get(&mpv_entry_id).cloned(),
+                        loaded: false,
+                    });
+                });
             }
             "file-loaded" => {
+                {
+                    let mut bookkeeping = self.bookkeeping.lock().expect("player bookkeeping state");
+                    let track = bookkeeping.full_playback.as_ref().and_then(|playback| {
+                        bookkeeping
+                            .tracks_by_mpv_entry_id
+                            .get(&playback.mpv_entry_id)
+                            .cloned()
+                            .or_else(|| playback.track.clone())
+                    });
+                    let resuming =
+                        bookkeeping
+                            .pending_resume
+                            .as_ref()
+                            .is_some_and(|(_, video_id, seconds, _)| {
+                                *seconds > 0.0
+                                    && track.as_ref().is_none_or(|track| &track.video_id == video_id)
+                            });
+                    if resuming {
+                        bookkeeping.full_playback = None;
+                    } else if let Some(playback) = bookkeeping.full_playback.as_mut() {
+                        playback.track = track;
+                        playback.loaded = true;
+                    }
+                }
                 self.timing_loaded();
                 self.background_tasks
                     .lock()
                     .expect("player tasks")
                     .spawn(Arc::clone(self).resume_loaded());
+            }
+            "seek" => {
+                self.bookkeeping
+                    .lock()
+                    .expect("player bookkeeping state")
+                    .full_playback = None;
             }
             "property-change" => {
                 let mut tracks_to_prefetch = Vec::new();
@@ -3422,6 +3649,25 @@ impl PlayerInner {
                 });
                 self.prefetch(tracks_to_prefetch);
                 self.timing_playing(message, previous_position);
+                if message.get("name").and_then(Value::as_str) == Some("eof-reached")
+                    && message.get("data").and_then(Value::as_bool) == Some(true)
+                {
+                    let candidate = self
+                        .bookkeeping
+                        .lock()
+                        .expect("player bookkeeping state")
+                        .full_playback
+                        .as_ref()
+                        .filter(|playback| playback.loaded)
+                        .map(|playback| (playback.mpv_entry_id, playback.sequence));
+                    if let Some((mpv_entry_id, sequence)) = candidate {
+                        // A kept-open file has no end-file event. Confirm identity because properties can be buffered.
+                        self.background_tasks
+                            .lock()
+                            .expect("player tasks")
+                            .spawn(Arc::clone(self).confirm_full_playback_eof(mpv_entry_id, sequence));
+                    }
+                }
             }
             "end-file" if message.get("reason").and_then(Value::as_str) == Some("error") => {
                 self.timing_stage("file_failed");
@@ -3686,6 +3932,18 @@ impl PlayerInner {
                         Some((mpv_entry_id, track.clone()))
                     })
                     .collect();
+                let full_playback_track = bookkeeping.full_playback.as_ref().and_then(|playback| {
+                    bookkeeping
+                        .tracks_by_mpv_entry_id
+                        .get(&playback.mpv_entry_id)
+                        .cloned()
+                });
+                if let Some(track) = full_playback_track
+                    && let Some(playback) = bookkeeping.full_playback.as_mut()
+                {
+                    // Metadata can follow file-loaded and must survive removal of the finished entry.
+                    playback.track = Some(track);
+                }
                 prune(&mut bookkeeping, &state.queue);
                 tracks_to_prefetch.extend(state.upcoming(self.options.prefetch_ahead));
             }

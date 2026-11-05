@@ -9,7 +9,7 @@ use ratatui::widgets::Widget;
 use crate::theme::Theme;
 use crate::ui::hit::{ConfirmationChoice, Hit};
 use crate::ui::popup;
-use crate::ui::{blank, fit, put, span, width_of};
+use crate::ui::{fit, put, span, width_of};
 
 /// Selection state defaults to the reversible choice for every prompt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -71,7 +71,7 @@ pub fn confirmation(buffer: &mut Buffer, bounds: Rect, view: ConfirmationView<'_
     let mut panel = popup::fit(&sizing_content, bounds, preferred_width);
     panel.x = bounds.x + bounds.width.saturating_sub(panel.width) / 2;
     panel.y = bounds.y + bounds.height.saturating_sub(panel.height) / 2;
-    blank(buffer, panel, Style::new().bg(view.theme.surface));
+    popup::frame(buffer, panel, view.theme.surface, view.theme.muted);
 
     let mut hit_regions = vec![(bounds, Hit::Overlay)];
     let content_area = popup::inner(panel);

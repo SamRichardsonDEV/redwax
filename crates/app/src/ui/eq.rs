@@ -1,5 +1,5 @@
-//! The equaliser, as a pane down the right with a rule between it and the
-//! page. Eighteen columns rising from a baseline, the centre frequency under
+//! The equaliser, as a bordered pane down the right of the page.
+//! Eighteen columns rising from a baseline, the centre frequency under
 //! each, and the state of the one band the keys are on.
 //!
 //! It takes only the rows it fills. A panel drawn the full height of the
@@ -19,7 +19,7 @@ use crate::eq::{BANDS, CENTRES, DISPLAY_MAX, Eq};
 use crate::theme::Theme;
 use crate::ui::hit::Hit;
 use crate::ui::popup;
-use crate::ui::{blank, put, spaces, span};
+use crate::ui::{put, spaces, span};
 
 /// Cells one band takes when the pane has room for the labels.
 const WIDE_SLOT: usize = 4;
@@ -31,9 +31,6 @@ const EIGHTHS: [char; 8] = [
 
 /// The mark across the panel at the gain that changes nothing.
 const FLAT_MARK: char = '\u{2500}';
-
-/// The rule between the pane and the page.
-const DIVIDER: &str = "\u{2502}";
 
 /// Rows the columns themselves take. Enough to read a gain at a glance and no
 /// more, because the pane is only as tall as what it holds.
@@ -68,16 +65,10 @@ pub fn eq(buffer: &mut Buffer, area: Rect, view: EqView<'_>) -> (Rect, Vec<(Rect
         .saturating_add(4)
         .min(u16::MAX as usize) as u16;
     let panel = popup::fit(&sizing_content, area, preferred_width);
-    let surface_style = Style::new().bg(view.theme.surface);
-    blank(buffer, panel, surface_style);
+    popup::frame(buffer, panel, view.theme.surface, view.theme.muted);
     let content_area = popup::inner(panel);
     if content_area.width == 0 || content_area.height == 0 {
         return (panel, Vec::new());
-    }
-
-    let divider_style = Style::new().fg(view.theme.gutter).bg(view.theme.surface);
-    for row_y in panel.y..panel.y + panel.height {
-        put(buffer, panel, row_y, vec![span(DIVIDER, divider_style)]);
     }
 
     let heading_paragraph = popup::paragraph(heading_line);

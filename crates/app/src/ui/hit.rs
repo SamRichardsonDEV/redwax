@@ -54,6 +54,9 @@ pub enum Hit {
     /// A row of the themes tab, by its index into the catalogue.
     ThemeRow(usize),
     ToggleSearchVim,
+    OpenMiniPlayer,
+    ToggleFocusSetting,
+    ChooseFocusPlaylist,
     /// How deep in the browser history that crumb sits.
     Crumb(usize),
     /// One equaliser column, with the region it fills, because the gain a

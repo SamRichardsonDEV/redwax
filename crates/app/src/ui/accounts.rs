@@ -3,7 +3,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, BorderType, Widget};
+use ratatui::widgets::Widget;
 use redwax_ytm::Account;
 
 use crate::theme::Theme;
@@ -87,11 +87,7 @@ pub fn accounts(
         width,
         height,
     );
-    blank(buffer, panel, Style::new().bg(theme.surface));
-    Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(Style::new().fg(theme.gutter))
-        .render(panel, buffer);
+    popup::frame(buffer, panel, theme.surface, theme.muted);
     let inner = popup::inner(panel);
     let mut hits = vec![(panel, Hit::Overlay)];
     if inner.is_empty() {

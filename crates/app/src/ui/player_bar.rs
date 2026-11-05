@@ -14,11 +14,12 @@ use redwax_player::{PlaybackAvailability, PlayerState, Repeat};
 use redwax_ytm::format_duration;
 
 use crate::icons::Icons;
+use crate::keys::Action;
 use crate::theme::Theme;
 use crate::ui::anim::{self, Motion};
 use crate::ui::hit::Hit;
 use crate::ui::layout::{PlayerMode, player_mode};
-use crate::ui::{fill, fit, line_width, put, spaces, span, width_of};
+use crate::ui::{clip, fill, fit, line_width, put, spaces, span, width_of};
 
 /// Rows the transport takes. `App::draw` reserves them under the body.
 pub const PLAYER_BAR_HEIGHT: u16 = 3;
@@ -49,28 +50,56 @@ pub struct BarView<'a> {
     /// The digits being typed into the volume field, while `v` has it open.
     pub volume_entry: Option<&'a str>,
     pub current_track_liked: bool,
+    pub focus_active: bool,
     pub icons: &'a Icons,
     pub theme: &'a Theme,
     pub motion: Motion,
 }
 
 pub fn player_bar(buffer: &mut Buffer, area: Rect, view: BarView<'_>) -> Vec<(Rect, Hit)> {
+    let playback_theme = view.theme.playback_details(view.focus_active);
+    let view = BarView {
+        theme: &playback_theme,
+        ..view
+    };
     fill(buffer, area, view.theme.surface);
     if area.width < 16 || area.height < PLAYER_BAR_HEIGHT {
         return Vec::new();
     }
-    let content_area = Rect::new(area.x + 2, area.y, area.width - 4, PLAYER_BAR_HEIGHT);
-    let content_width = content_area.width as usize;
-    put(
-        buffer,
-        content_area,
-        content_area.y,
-        now_playing(&view, content_width),
+    let minimal = area.width < 40;
+    let horizontal_padding = if minimal { 1 } else { 2 };
+    let content_area = Rect::new(
+        area.x + horizontal_padding,
+        area.y,
+        area.width - horizontal_padding * 2,
+        PLAYER_BAR_HEIGHT,
     );
+    let content_width = content_area.width as usize;
+    let focus_label = match (view.focus_active, minimal, area.width < 24) {
+        (false, _, _) => "",
+        (true, false, _) => "FOCUS ON  ",
+        (true, true, true) => "F ",
+        (true, true, false) => "FOCUS ",
+    };
+    let mut track_spans = vec![span(
+        focus_label,
+        Style::new().fg(view.theme.error).add_modifier(Modifier::BOLD),
+    )];
+    let track_width = content_width.saturating_sub(width_of(focus_label));
+    track_spans.extend(if minimal {
+        minimal_now_playing(&view, track_width)
+    } else {
+        now_playing(&view, track_width)
+    });
+    put(buffer, content_area, content_area.y, track_spans);
 
-    let (seek_spans, seek_area) = seek(&view, content_area);
+    let (seek_spans, seek_area) = seek(&view, content_area, minimal);
     put(buffer, content_area, content_area.y + 1, seek_spans);
-    let (mode_spans, mut hit_regions) = modes(&view, content_area);
+    let (mode_spans, mut hit_regions) = if minimal {
+        minimal_modes(&view, content_area)
+    } else {
+        modes(&view, content_area)
+    };
     put(buffer, content_area, content_area.y + 2, mode_spans);
     if let Some(seek_area) = seek_area {
         hit_regions.push((seek_area, Hit::SeekBar(seek_area)));
@@ -78,10 +107,109 @@ pub fn player_bar(buffer: &mut Buffer, area: Rect, view: BarView<'_>) -> Vec<(Re
     hit_regions
 }
 
+fn minimal_now_playing(view: &BarView<'_>, width: usize) -> Vec<Span<'static>> {
+    let pending_track = view.player_state.pending_track.as_ref();
+    let Some(track) = pending_track.or_else(|| view.player_state.track()) else {
+        return now_playing(view, width);
+    };
+    let icon = match pending_track {
+        Some(_) => view.icons.loading,
+        None => view.icons.transport(view.player_state),
+    };
+    let prefix = format!("{icon} ");
+    let title_width = width.saturating_sub(width_of(&prefix));
+    vec![
+        span(prefix, Style::new().fg(view.theme.accent)),
+        span(
+            anim::scrolling(
+                &track.title,
+                title_width,
+                view.motion.animation_frame,
+                view.motion.animations_enabled,
+            ),
+            Style::new()
+                .fg(view.theme.foreground)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]
+}
+
+fn minimal_modes(view: &BarView<'_>, area: Rect) -> (Vec<Span<'static>>, Vec<(Rect, Hit)>) {
+    let enabled = Style::new().fg(view.theme.accent).add_modifier(Modifier::BOLD);
+    let muted = Style::new().fg(view.theme.muted);
+    let row_y = area.y + 2;
+    let width = usize::from(area.width);
+    let mut spans = Vec::new();
+    let mut hits = Vec::new();
+    let mut column = 0;
+    for (icon, hit) in [
+        (view.icons.previous, Hit::Previous),
+        (view.icons.transport(view.player_state), Hit::PlayPause),
+        (view.icons.next, Hit::Next),
+    ] {
+        let text = format!("{icon} ");
+        let button_width = width_of(&text);
+        spans.push(span(text, enabled));
+        hits.push((
+            Rect::new(area.x + column as u16, row_y, button_width as u16, 1),
+            hit,
+        ));
+        column += button_width;
+    }
+
+    let show_muted = view.player_state.muted && view.volume_preview_percent.is_none();
+    let volume = match view.volume_entry {
+        Some(entry) => format!("{entry}%"),
+        None if show_muted => "mute".to_string(),
+        None => format!(
+            "{}%",
+            view.volume_preview_percent.unwrap_or(view.player_state.volume)
+        ),
+    };
+    let volume_icon = format!(
+        "{} ",
+        if show_muted {
+            view.icons.muted
+        } else {
+            view.icons.volume
+        }
+    );
+    let volume_width = width_of(&volume);
+    if column + 1 + volume_width <= width {
+        spans.push(spaces(1));
+        column += 1;
+        let start = column;
+        if column + width_of(&volume_icon) + volume_width <= width {
+            column += width_of(&volume_icon);
+            spans.push(span(volume_icon, if show_muted { muted } else { enabled }));
+        }
+        spans.push(span(volume, muted));
+        column += volume_width;
+        hits.push((
+            Rect::new(area.x + start as u16, row_y, (column - start) as u16, 1),
+            Hit::Mute,
+        ));
+    }
+
+    let queue_hint = if column + 8 <= width { "q queue" } else { "q" };
+    let hint_width = width_of(queue_hint);
+    if column + 1 + hint_width <= width {
+        spans.push(spaces(1));
+        column += 1;
+        spans.push(span(queue_hint, enabled));
+        hits.push((
+            Rect::new(area.x + column as u16, row_y, hint_width as u16, 1),
+            Hit::KeyHint(Action::JumpToQueue),
+        ));
+    }
+    (spans, hits)
+}
+
 /// The state icon, the equaliser, what plays, and the tier the stream came at
 /// against the right edge.
 fn now_playing(view: &BarView<'_>, width: usize) -> Vec<Span<'static>> {
     let theme = view.theme;
+    let accent = theme.accent;
     let muted = Style::new().fg(theme.muted);
     let pending_track = view.player_state.pending_track.as_ref();
     let Some(current_track) = pending_track.or_else(|| view.player_state.track()) else {
@@ -112,13 +240,10 @@ fn now_playing(view: &BarView<'_>, width: usize) -> Vec<Span<'static>> {
             "{transport_icon} {}  ",
             anim::equaliser(view.motion.animation_frame, view.motion.playback_moving,)
         ),
-        Style::new().fg(theme.accent),
+        Style::new().fg(accent),
     )];
     if view.current_track_liked && pending_track.is_none() {
-        line_spans.push(span(
-            format!("{} ", view.icons.liked),
-            Style::new().fg(theme.accent),
-        ));
+        line_spans.push(span(format!("{} ", view.icons.liked), Style::new().fg(accent)));
     }
 
     let (availability_label, availability_style) = match (pending_track, view.player_state.availability) {
@@ -172,7 +297,7 @@ fn now_playing(view: &BarView<'_>, width: usize) -> Vec<Span<'static>> {
 /// Elapsed, the bar, total. The bar takes every cell the two times leave, so it
 /// grows with the terminal rather than staying a fixed stub. The rect is the
 /// bar alone, because a click on it seeks to that fraction.
-fn seek(view: &BarView<'_>, content_area: Rect) -> (Vec<Span<'static>>, Option<Rect>) {
+fn seek(view: &BarView<'_>, content_area: Rect, minimal: bool) -> (Vec<Span<'static>>, Option<Rect>) {
     let theme = view.theme;
     let dim = Style::new().fg(theme.dim);
     let gutter = Style::new().fg(theme.gutter);
@@ -186,7 +311,7 @@ fn seek(view: &BarView<'_>, content_area: Rect) -> (Vec<Span<'static>>, Option<R
         );
     }
 
-    let (elapsed_text, total_text) = match player_state.track() {
+    let (mut elapsed_text, mut total_text) = match player_state.track() {
         Some(_) => {
             let position_seconds = match (view.seek_preview_fraction, player_state.duration) {
                 (Some(preview_fraction), Some(duration_seconds)) => {
@@ -205,6 +330,10 @@ fn seek(view: &BarView<'_>, content_area: Rect) -> (Vec<Span<'static>>, Option<R
         }
         None => (String::new(), String::new()),
     };
+    if minimal && width_of(&elapsed_text) + width_of(&total_text) + 4 > width {
+        total_text.clear();
+        elapsed_text = clip(&elapsed_text, width.saturating_sub(4));
+    }
     let bar_width = width
         .saturating_sub(width_of(&elapsed_text) + width_of(&total_text) + 2)
         .max(2);
@@ -483,6 +612,7 @@ mod tests {
                     volume_preview_percent: None,
                     volume_entry: None,
                     current_track_liked: false,
+                    focus_active: false,
                     icons: &crate::icons::TEXT,
                     theme: &theme,
                     motion: Motion::default(),
@@ -516,6 +646,7 @@ mod tests {
             volume_preview_percent: None,
             volume_entry: None,
             current_track_liked: false,
+            focus_active: false,
             icons: &crate::icons::TEXT,
             theme: &theme,
             motion: Motion::default(),

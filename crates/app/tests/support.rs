@@ -220,6 +220,8 @@ pub struct FakeSource {
     /// Held closed, `home` waits on it. The Python test used a threading event.
     pub home_gate: Option<Arc<Semaphore>>,
     pub browse_gate: Option<Arc<Semaphore>>,
+    pub playlist_overrides: Mutex<HashMap<String, Vec<Track>>>,
+    pub fail_playlist_reads_after_edit: bool,
     /// Set when the playlist is served a batch at a time.
     pub paged: Option<Paged>,
     pub radio_paged: Option<Paged>,
@@ -243,6 +245,8 @@ impl Default for FakeSource {
             handle: Some("@sam".to_string()),
             home_gate: None,
             browse_gate: None,
+            playlist_overrides: Mutex::new(HashMap::new()),
+            fail_playlist_reads_after_edit: false,
             paged: None,
             radio_paged: None,
             radio_batch: AtomicUsize::new(1),
@@ -375,6 +379,41 @@ impl MusicSource for FakeSource {
         if let Some(gate) = &self.browse_gate {
             let _ = gate.acquire().await;
         }
+        if let Browsable::Playlist(playlist) = item {
+            if self.fail_playlist_reads_after_edit
+                && self
+                    .calls()
+                    .iter()
+                    .any(|call| call.starts_with("add_to_playlist:"))
+            {
+                return Err(redwax_ytm::Error::Network(
+                    "fixture playlist refresh failed".into(),
+                ));
+            }
+            let playlist_id = playlist
+                .playlist_id
+                .strip_prefix("VL")
+                .unwrap_or(&playlist.playlist_id);
+            let override_tracks = self
+                .playlist_overrides
+                .lock()
+                .expect("playlist fixtures")
+                .get(playlist_id)
+                .cloned();
+            if let Some(override_tracks) = override_tracks {
+                let items = override_tracks
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, track)| {
+                        Item::Track(Track {
+                            playlist_entry: Some(PlaylistEntry::synthetic(index as u64 + 1)),
+                            ..track
+                        })
+                    })
+                    .collect();
+                return Ok(self.served(Page::new(item.title(), vec![Shelf::new("Tracks", items)])));
+            }
+        }
         if let (Some(paged), Browsable::Playlist(_)) = (&self.paged, item) {
             return Ok(self.served(Page {
                 more: paged.more(0),
@@ -494,10 +533,25 @@ impl MusicSource for FakeSource {
 
     async fn add_to_playlist(&self, playlist_id: &str, video_ids: &[String]) -> Result<PlaylistAdd> {
         self.record(format!("add_to_playlist:{playlist_id}:{}", video_ids.join(",")));
-        match self.edits_fail {
-            true => Err(redwax_ytm::Error::Other("the edit was refused".to_string())),
-            false => Ok(PlaylistAdd::Added),
+        if self.edits_fail {
+            return Err(redwax_ytm::Error::Other("the edit was refused".to_string()));
         }
+        let playlist_id = playlist_id.strip_prefix("VL").unwrap_or(playlist_id);
+        let mut overrides = self.playlist_overrides.lock().expect("playlist fixtures");
+        if let Some(members) = overrides.get_mut(playlist_id) {
+            for video_id in video_ids {
+                if members.iter().any(|track| &track.video_id == video_id) {
+                    continue;
+                }
+                members.push(
+                    tracks()
+                        .into_iter()
+                        .find(|track| &track.video_id == video_id)
+                        .unwrap_or_else(|| redwax_player::bare_track(video_id, video_id)),
+                );
+            }
+        }
+        Ok(PlaylistAdd::Added)
     }
 
     async fn remove_playlist_entry(

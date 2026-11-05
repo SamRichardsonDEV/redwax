@@ -129,6 +129,25 @@ pub trait MusicSource: Send + Sync + 'static {
     /// A playlist can be incomplete. Use `collect_page` before edits that need all members.
     fn browse(&self, item: &Browsable) -> impl Future<Output = Result<Page>> + Send;
 
+    /// A negative result requires complete membership so automatic saves cannot create duplicates.
+    fn playlist_contains(
+        &self,
+        playlist: &Playlist,
+        video_id: &str,
+    ) -> impl Future<Output = Result<bool>> + Send
+    where
+        Self: Sized,
+    {
+        async move {
+            let page = self.browse(&Browsable::Playlist(playlist.clone())).await?;
+            let page = collect_page(self, page)
+                .await
+                .map_err(|incomplete| incomplete.error)?
+                .into_page();
+            Ok(page.tracks().any(|track| track.video_id == video_id))
+        }
+    }
+
     /// The default refuses because an empty success would look like completion.
     fn continue_page(
         &self,
@@ -645,6 +664,11 @@ impl MusicSource for Client {
             Browsable::Playlist(playlist) => self.playlist_page(playlist).await,
             Browsable::Artist(artist) => self.artist_page(artist).await,
         }
+    }
+
+    async fn playlist_contains(&self, playlist: &Playlist, video_id: &str) -> Result<bool> {
+        let members = self.playlist_members(&playlist.playlist_id).await?;
+        Ok(members.contains(video_id))
     }
 
     async fn continue_page(&self, continuation: &Continuation) -> Result<(Vec<Item>, Option<Continuation>)> {

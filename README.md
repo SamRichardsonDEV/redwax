@@ -183,6 +183,17 @@ Press `6` to preview and choose themes. redwax includes ten themes, can read
 custom palettes, and can follow Ghostty, foot or Omarchy colours.
 See [themes](docs/themes.md) for custom files and dotfile links.
 
+## Mini player
+
+Run `redwax mini` in a terminal or split pane. It controls a running redwax
+session, or starts its own playback session when none is running.
+The compact view uses the same player bar, icons and colours as the full app.
+
+Use your terminal or multiplexer to choose its size and position.
+No particular terminal or multiplexer is required. In the full app, press `7`
+and choose **Mini player** to switch the current view to mini.
+See [Mini player](docs/usage.md#mini-player) for controls and session behaviour.
+
 ## Troubleshooting
 
 ```sh
@@ -197,6 +208,15 @@ without song titles, account headers or stream URLs.
 
 YouTube can change its responses or playback requirements. Successful setup
 does not establish that every track or future YouTube change will work.
+
+## Feedback
+
+Tried redwax? [Share a short installation report](https://github.com/SamRichardsonDEV/redwax/issues/new?template=installation.yml)
+with your Linux distribution, terminal and what worked. A sentence is enough.
+
+For installation, sign-in or playback problems,
+[report a bug](https://github.com/SamRichardsonDEV/redwax/issues/new?template=bug.yml).
+Search existing issues first. Issues are for installation reports and bugs.
 
 ## Source layout
 

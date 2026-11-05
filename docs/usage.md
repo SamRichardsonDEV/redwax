@@ -3,6 +3,9 @@
 Every key, every subcommand, every flag and every environment variable.
 `README.md` is the short version. Commands below use the installed `redwax` command.
 
+Settings, Themes and popups use rounded borders to keep their edges visible.
+Notification borders use the message severity colour.
+
 ## Keys
 
 The Keys panel shows the same two-column hints on every tab. Some actions
@@ -150,6 +153,23 @@ redwax [--config PATH] [--version]
   `~/.config/redwax/config.toml`.
 - `--version`, `-V`: print the version and exit.
 - `--help`, `-h`: print the usage and exit.
+
+### `redwax mini`
+
+```
+redwax mini [--player BUS_NAME] [--config PATH]
+```
+
+Opens a compact player in the current terminal. If one redwax session is
+running, the mini player controls that session and uses its account and queue.
+If none is running, it starts its own playback session with the normal config,
+login and saved queue.
+
+If several redwax sessions are running, use `--player` with the full MPRIS bus
+name to choose one. An unavailable explicit session or a connection error
+stops the command without starting another player.
+
+See [Mini player](#mini-player) for controls, layout and session behaviour.
 
 ### `redwax setup`
 
@@ -393,7 +413,8 @@ only the missing songs. Ordinary saves need no extra playlist lookup.
 
 The last row, `+ New playlist`, asks for a name. `enter` makes a private
 playlist holding what the picker was adding, and `escape` goes back to the
-list. The library is fetched again after, so the next picker lists it.
+list. Once YouTube confirms creation, the new playlist appears in the library
+and the next picker immediately.
 
 `D` on the page of an open playlist takes the highlighted track out of it. The
 row leaves the list at once and goes back if YouTube refuses. Anywhere else,
@@ -410,7 +431,7 @@ key names one track, so neither has to guess.
 
 ## The equaliser panel
 
-`e` opens it down the right of the screen with a rule between it and the page,
+`e` opens a panel with a rounded border down the right of the screen,
 and `e` or `escape` closes it. It takes only the rows it fills, so the page
 shows through under it. It draws one column per band of ffmpeg's
 `superequalizer`, eighteen of them, with the centre of each under it: 65, 92,
@@ -520,6 +541,112 @@ for every hint drops the last rows, and `?` still lists them all.
 
 A terminal too narrow for the sidebar has no box, and the hints go back to a
 single row along the bottom of the screen.
+
+## Focus mode
+
+Focus mode collects songs that you listen to completely without skipping or
+seeking. It appends each qualifying song to your chosen playlist if that song
+is absent. Songs already in the destination playlist are exempt, including
+when you listen to that playlist with focus mode on.
+
+1. Press `7` to open Settings.
+2. Select the indented **Playlist** row under **Focus mode**.
+3. Choose a playlist you own and press `enter` to save the destination.
+4. Select **Focus mode** and press `enter` or `space` to start collecting.
+
+If no destination is configured, enabling focus mode opens the playlist
+picker first. Choosing a playlist then starts collection. Press `escape` to
+cancel. Settings shows **On** only while collection is active.
+To stop collecting, return to Settings and select **Focus mode** again.
+Changing the Playlist row while focus mode is on switches the destination
+and keeps collection on. Changing it while focus mode is off leaves it off.
+Cancelling the picker keeps the current destination and mode.
+Focus mode has no keyboard shortcut outside Settings.
+
+The main player and `redwax mini` show a red **FOCUS ON** label while focus
+mode is active. Track details, transport controls, volume and progress turn
+red in both views. The sidebar track title, artist and album also turn red.
+Collection starts with the next song.
+A song already playing when you activate focus mode does not qualify until
+you play it again from the start. Pausing does not disqualify a song. Skips,
+seeks, playback errors and songs resumed partway through do not qualify.
+
+Use repeat off or repeat queue with focus mode. Turning on repeat track stops
+focus mode because [mpv repeats a single track by seeking](https://mpv.io/manual/stable/#options-loop-file).
+That path does not report the natural completion event used for collection.
+
+redwax reads the complete destination playlist before each append. It saves
+one song at a time and does not queue duplicate pending saves. Confirmed
+saved songs remain excluded for the session. Failed or cancelled saves can
+qualify again on a later full play.
+The focus settings keep the last collection result visible, including saved
+songs, songs already present and failed saves.
+After a save, redwax refreshes the destination playlist from YouTube. Open
+views and cached copies update without changing your selection or opening
+the playlist over another page. If this refresh fails, redwax shows a warning
+and keeps focus mode on. The song remains saved to YouTube.
+If the membership check or save fails, focus mode stops and shows an error.
+Turning the setting off or changing accounts also stops focus mode.
+An append already sent to YouTube can still finish.
+
+The last destination is saved in `config.toml` as `focus_playlist_id` and
+`focus_playlist_title`. It is shown in the Playlist row and highlighted when
+you open the picker. Focus mode starts off on each launch.
+
+## Mini player
+
+Run `redwax mini` wherever you want a compact player, such as a terminal split
+or a pane in your preferred multiplexer. redwax does not create or position
+windows, and it does not require Ghostty, tmux or Sway.
+
+The mini player uses the same player bar, icons, colours and animations as the
+full app. It fits in three rows, with a fourth row for shortcuts when space
+permits. Narrow panes give the title and playback controls priority. Wider
+panes also show the artist and more playback details.
+
+In the full app, press `7` to open Settings, select **Mini player**, then press
+`enter` or `space` on **Open here**. This changes the view in the current
+terminal and keeps the same playback session. Clicking the setting does the
+same thing.
+
+| launch state | playback session | closing the mini player |
+|---|---|---|
+| A redwax session is already running | Controls the existing session | Leaves that session playing |
+| No redwax session is running | Starts and owns a session | Saves the queue and stops playback |
+
+An attached mini player follows the chosen session name for its whole run.
+If that session stops responding or restarts, the mini player stays open and
+reconnects to the same name. Controls remain unavailable until fresh playback
+state arrives. Commands from the old connection are discarded. The mini
+player does not start a replacement playback session during reconnection.
+
+A mini player that starts its own session restores the saved queue paused.
+Press `space` to resume it.
+
+When the mini player owns its session, press `F` (Shift+F) to open the full app
+in the same terminal. This lets you browse music and choose a queue. Use
+Settings to return to mini. Resize or zoom a small pane before using the full
+view. An attached mini player does not offer this shortcut.
+
+Click the controls or use these keys:
+
+| key | action |
+|---|---|
+| `space` | play or pause |
+| `n`, `right` | next track |
+| `p`, `left` | previous track |
+| `,`, `.` | jump back or forward five seconds |
+| `<`, `>` | jump back or forward thirty seconds |
+| `-`, `=` | decrease or increase volume |
+| `m` | mute or restore the previous volume |
+| `s` | toggle shuffle |
+| `R` | cycle repeat mode |
+| `q`, `tab`, `l` | show or hide the queue |
+| `up`, `down`, `j`, `k` | select a queue entry |
+| `enter` | play the selected queue entry |
+| `escape` | hide the queue, or close the mini player |
+| `Q` | close the mini player |
+| `F` (Shift+F), when the mini player owns its session | open the full app |
 
 ## Animation
 

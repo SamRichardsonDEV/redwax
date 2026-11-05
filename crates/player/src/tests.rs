@@ -334,6 +334,7 @@ struct FakeMpv {
     quit_gate: Mutex<Option<Arc<Semaphore>>>,
     quit_requested: Semaphore,
     event_sink: Mutex<Option<Arc<MpvEventSink>>>,
+    eof_reached: AtomicBool,
 }
 
 impl FakeMpv {
@@ -352,6 +353,7 @@ impl FakeMpv {
             quit_gate: Mutex::new(None),
             quit_requested: Semaphore::new(0),
             event_sink: Mutex::new(None),
+            eof_reached: AtomicBool::new(false),
         })
     }
 
@@ -468,6 +470,9 @@ impl Ipc for FakeMpv {
                     playlist.insert(to, entry);
                 }
                 Ok(Value::Null)
+            }
+            "get_property" if args.get(1) == Some(&json!("eof-reached")) => {
+                Ok(json!(self.eof_reached.load(Ordering::SeqCst)))
             }
             "get_property" => Ok(Value::Array(self.playlist.lock().expect("fake mpv").clone())),
             _ => Ok(Value::Null),
@@ -655,6 +660,335 @@ fn test_loading_is_true_while_mpv_resolves_the_stream() {
     assert!(player.snapshot().loading);
     player.inner.handle_event(&change("core-idle", json!(false)));
     assert!(!player.snapshot().loading);
+}
+
+#[tokio::test]
+async fn full_play_uses_the_finished_entry_even_after_the_queue_advances() {
+    let player = quiet_player();
+    let first = track("first", "First song");
+    let next = track("next", "Next song");
+    player.inner.remember(&[first.clone(), next.clone()]);
+    player
+        .inner
+        .handle_event(&playlist_event(&[(1, first.url()), (2, next.url())]));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.inner.handle_event(&playlist_event(&[(2, next.url())]));
+    player.inner.handle_event(&change("playlist-pos", json!(0)));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+    player.inner.handle_event(&change("time-pos", json!(0.5)));
+
+    let snapshot = player.snapshot();
+    assert_eq!(snapshot.track(), Some(&next));
+    assert_eq!(
+        snapshot.completed_tracks.into_iter().collect::<Vec<_>>(),
+        vec![(1, first)]
+    );
+    player.inner.wait_for_tasks().await;
+}
+
+#[tokio::test]
+async fn skips_errors_seeks_and_unloaded_entries_never_complete_a_full_play() {
+    let player = quiet_player();
+    let song = track("song", "Song");
+    player.inner.remember(std::slice::from_ref(&song));
+    player.inner.handle_event(&playlist_event(&[(1, song.url())]));
+
+    for reason in ["stop", "quit", "redirect", "error"] {
+        player
+            .inner
+            .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+        player.inner.handle_event(&json!({"event": "file-loaded"}));
+        player
+            .inner
+            .handle_event(&json!({"event": "end-file", "reason": reason, "playlist_entry_id": 1}));
+    }
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.inner.handle_event(&json!({"event": "seek"}));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+
+    assert!(player.snapshot().completed_tracks.is_empty());
+    player.inner.wait_for_tasks().await;
+}
+
+#[tokio::test]
+async fn command_seeks_and_saved_positions_disqualify_the_current_full_play() {
+    let player = quiet_player();
+    let song = track("song", "Song");
+    player.inner.remember(std::slice::from_ref(&song));
+    player.inner.set_ipc(FakeMpv::with_playlist(&[(1, song.url())]));
+    player.inner.handle_event(&playlist_event(&[(1, song.url())]));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.seek_to(90.0).await.expect("seek command");
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+
+    player
+        .inner
+        .bookkeeping
+        .lock()
+        .expect("bookkeeping")
+        .pending_resume = Some((1, song.video_id.clone(), 30.0, crate::PlaybackIntent::Play));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+
+    assert!(player.snapshot().completed_tracks.is_empty());
+    player.inner.wait_for_tasks().await;
+}
+
+#[tokio::test]
+async fn repeated_full_plays_keep_distinct_sequences_in_bounded_history() {
+    let player = quiet_player();
+    let song = track("song", "Song");
+    player.inner.remember(std::slice::from_ref(&song));
+    player.inner.handle_event(&playlist_event(&[(1, song.url())]));
+    let mut observations = player.state();
+
+    for _ in 0..35 {
+        player
+            .inner
+            .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+        player.inner.handle_event(&json!({"event": "file-loaded"}));
+        player
+            .inner
+            .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 2}));
+        player
+            .inner
+            .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+    }
+
+    let snapshot = observations.borrow_and_update().clone();
+    assert_eq!(snapshot.playback_sequence, 35);
+    assert_eq!(snapshot.completed_tracks.len(), 32);
+    assert_eq!(snapshot.completed_tracks.front(), Some(&(4, song.clone())));
+    assert_eq!(snapshot.completed_tracks.back(), Some(&(35, song)));
+    player.inner.wait_for_tasks().await;
+}
+
+#[tokio::test]
+async fn a_normal_play_request_can_complete_through_kept_open_eof_without_end_file() {
+    let player = Player::new(options("focus-kept-open"), Some(TestSource::default()));
+    let mpv = FakeMpv::with_playlist(&[]);
+    player.inner.set_ipc(mpv.clone());
+    let song = track("focus", "Full focus song");
+    player.play(vec![song.clone()], 0).await.expect("play from start");
+    let playlist = json!([{
+        "id": 1,
+        "filename": TestSource::stream_for("focus").target,
+        "current": true,
+    }]);
+    *mpv.playlist.lock().expect("fake playlist") = playlist.as_array().unwrap().clone();
+    player.inner.handle_event(&change("playlist", playlist));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.inner.wait_for_tasks().await;
+    assert!(!mpv.calls().iter().any(|call| call[0] == json!("seek")));
+
+    player.inner.handle_event(&change("eof-reached", json!(true)));
+    player.inner.wait_for_tasks().await;
+    assert!(player.snapshot().completed_tracks.is_empty());
+
+    mpv.eof_reached.store(true, Ordering::SeqCst);
+    player.inner.handle_event(&change("eof-reached", json!(true)));
+    player.inner.wait_for_tasks().await;
+    assert_eq!(
+        player.snapshot().completed_tracks.into_iter().collect::<Vec<_>>(),
+        [(1, song)]
+    );
+
+    player.inner.handle_event(&change("eof-reached", json!(true)));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "playlist_entry_id": 1, "reason": "eof"}));
+    player.inner.wait_for_tasks().await;
+    assert_eq!(player.snapshot().completed_tracks.len(), 1);
+}
+
+#[tokio::test]
+async fn a_saved_position_resume_cannot_qualify_through_the_eof_property() {
+    let player = Player::new(options("focus-resumed-eof"), Some(TestSource::default()));
+    let mpv = FakeMpv::with_playlist(&[]);
+    player.inner.set_ipc(mpv.clone());
+    player
+        .play_from(vec![track("focus", "Resumed song")], 0, 30.0)
+        .await
+        .expect("resume partway through");
+    let playlist = json!([{
+        "id": 1,
+        "filename": TestSource::stream_for("focus").target,
+        "current": true,
+    }]);
+    *mpv.playlist.lock().expect("fake playlist") = playlist.as_array().unwrap().clone();
+    player.inner.handle_event(&change("playlist", playlist));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.inner.wait_for_tasks().await;
+    assert!(
+        mpv.calls()
+            .contains(&vec![json!("seek"), json!(30.0), json!("absolute+exact")])
+    );
+
+    mpv.eof_reached.store(true, Ordering::SeqCst);
+    player.inner.handle_event(&change("eof-reached", json!(true)));
+    player.inner.wait_for_tasks().await;
+    assert!(player.snapshot().completed_tracks.is_empty());
+}
+
+#[tokio::test]
+async fn a_stream_replacement_keeps_full_play_attribution_on_the_new_mpv_entry() {
+    let player = Player::new(options("focus-replaced-eof"), Some(TestSource::default()));
+    let mpv = FakeMpv::with_playlist(&[]);
+    player.inner.set_ipc(mpv.clone());
+    let song = track("focus", "Replaced focus song");
+    player.play(vec![song.clone()], 0).await.expect("play from start");
+    let initial_target = TestSource::stream_for("focus").target;
+    let playlist = json!([{"id": 1, "filename": initial_target, "current": true}]);
+    *mpv.playlist.lock().expect("fake playlist") = playlist.as_array().unwrap().clone();
+    player.inner.handle_event(&change("playlist", playlist));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.inner.wait_for_tasks().await;
+
+    let replacement = player
+        .inner
+        .replace_entry(0, 1, &initial_target, "https://cdn/focus/fresh", true)
+        .await
+        .expect("replace selected stream")
+        .expect("replacement remains queued");
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "playlist_entry_id": 1, "reason": "stop"}));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "playlist_entry_id": replacement, "reason": "eof"}));
+    assert_eq!(
+        player.snapshot().completed_tracks.into_iter().collect::<Vec<_>>(),
+        [(1, song)]
+    );
+}
+
+#[tokio::test]
+async fn a_buffered_eof_cannot_complete_a_new_playback_of_the_same_entry() {
+    let player = quiet_player();
+    let song = track("focus", "Focus song");
+    player.inner.remember(std::slice::from_ref(&song));
+    let mpv = FakeMpv::with_playlist(&[(1, song.url())]);
+    player.inner.set_ipc(mpv.clone());
+    mpv.playlist.lock().expect("fake playlist")[0]["current"] = json!(true);
+    player.inner.handle_event(&playlist_event(&[(1, song.url())]));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.inner.wait_for_tasks().await;
+
+    let queue_guard = player.inner.queue_edit_lock.lock().await;
+    mpv.eof_reached.store(true, Ordering::SeqCst);
+    player.inner.handle_event(&change("eof-reached", json!(true)));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    drop(queue_guard);
+    player.inner.wait_for_tasks().await;
+    assert!(player.snapshot().completed_tracks.is_empty());
+
+    player.inner.handle_event(&change("eof-reached", json!(true)));
+    player.inner.wait_for_tasks().await;
+    assert_eq!(
+        player.snapshot().completed_tracks.into_iter().collect::<Vec<_>>(),
+        [(2, song)]
+    );
+}
+
+#[tokio::test]
+async fn full_play_metadata_that_arrives_after_loading_survives_queue_advance() {
+    let player = quiet_player();
+    let song = track("focus", "Focus song");
+    let next = track("next", "Next song");
+    player.inner.remember(&[song.clone(), next.clone()]);
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player
+        .inner
+        .handle_event(&playlist_event(&[(1, song.url()), (2, next.url())]));
+    player.inner.handle_event(&playlist_event(&[(2, next.url())]));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+
+    assert_eq!(
+        player.snapshot().completed_tracks.into_iter().collect::<Vec<_>>(),
+        [(1, song)]
+    );
+    player.inner.wait_for_tasks().await;
+}
+
+#[tokio::test]
+async fn eof_verification_cannot_override_a_seek_stop_or_playback_error() {
+    for interruption in ["seek", "stop", "error"] {
+        let player = quiet_player();
+        let song = track("focus", "Interrupted song");
+        player.inner.remember(std::slice::from_ref(&song));
+        let mpv = FakeMpv::with_playlist(&[(1, song.url())]);
+        player.inner.set_ipc(mpv.clone());
+        mpv.playlist.lock().expect("fake playlist")[0]["current"] = json!(true);
+        player.inner.handle_event(&playlist_event(&[(1, song.url())]));
+        player
+            .inner
+            .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+        player.inner.handle_event(&json!({"event": "file-loaded"}));
+        player.inner.wait_for_tasks().await;
+
+        let queue_guard = player.inner.queue_edit_lock.lock().await;
+        mpv.eof_reached.store(true, Ordering::SeqCst);
+        player.inner.handle_event(&change("eof-reached", json!(true)));
+        if interruption == "seek" {
+            player.seek_to(60.0).await.expect("seek interrupts qualification");
+        } else {
+            player.inner.handle_event(&json!({
+                "event": "end-file", "playlist_entry_id": 1, "reason": interruption,
+            }));
+        }
+        drop(queue_guard);
+        player.inner.wait_for_tasks().await;
+        assert!(player.snapshot().completed_tracks.is_empty(), "{interruption}");
+    }
 }
 
 #[tokio::test]

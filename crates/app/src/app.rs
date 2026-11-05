@@ -27,6 +27,7 @@ use crate::config::Config;
 use crate::icons::Icons;
 use crate::keys::{Action, action, list_action};
 pub use crate::likes::LikeRequest;
+use crate::mini_remote::MiniAction;
 use crate::playback::{Playback, QueueEditPreview, StationEffect, StationEvent};
 pub use crate::request::RequestId;
 use crate::request::RequestSlot;
@@ -437,9 +438,15 @@ pub enum AppEvent {
         video_id: String,
         playlist_entry: Option<PlaylistEntry>,
     },
-    /// A playlist was made, so the library that lists playlists is stale.
-    PlaylistCreated,
+    PlaylistCreated {
+        generation: u64,
+        playlist: Playlist,
+    },
     PlayerChanged(PlayerState),
+    FocusSaved {
+        request: RequestId,
+        result: Result<PlaylistAdd, String>,
+    },
     /// A session refresh finished. `error` is the reason it did not.
     SessionRefreshed {
         error: Option<String>,
@@ -513,6 +520,9 @@ enum Addition {
 /// What the picker does to the playlist chosen.
 enum Edit {
     Add(Addition),
+    FocusDestination {
+        start: bool,
+    },
     /// Take every row of this track out. The row ids are read from the chosen
     /// playlist, because YouTube serves them only on that playlist's own page.
     Remove(Track),
@@ -571,10 +581,18 @@ impl PlaylistPicker {
         matches!(self.primary_subject.edit, Edit::Remove(_))
     }
 
+    pub fn focus_destination(&self) -> bool {
+        matches!(self.primary_subject.edit, Edit::FocusDestination { .. })
+    }
+
+    fn can_create(&self) -> bool {
+        matches!(self.primary_subject.edit, Edit::Add(_))
+    }
+
     /// Rows the cursor can reach. Removing has no new playlist row, because
     /// nothing can be taken out of a playlist that does not exist yet.
     fn row_count(&self) -> usize {
-        self.playlists.len() + usize::from(!self.remove_mode())
+        self.playlists.len() + usize::from(self.can_create())
     }
 
     /// The playlist under the cursor, `None` on the new playlist row.
@@ -699,6 +717,9 @@ pub struct App<S: MusicSource, P: PlayerControl> {
     pub lyrics: crate::lyrics::LyricsPane,
     pub liked_overrides: HashMap<String, bool>,
     like_intents: crate::likes::Likes,
+    focus_mode: crate::focus::FocusMode,
+    /// A successful creation can precede its appearance in YouTube library reads.
+    created_playlists: Vec<Playlist>,
     pub notifications: Vec<Notification>,
     last_notification: Option<Notification>,
     help_scroll: ui::popup::Scroll,
@@ -715,6 +736,8 @@ pub struct App<S: MusicSource, P: PlayerControl> {
     theme_controller: ThemeController,
     pub art: ArtBox,
     pub mpris: Arc<Mutex<Option<crate::mpris::Mpris>>>,
+    mini_view: Option<crate::mini::MiniView>,
+    selected_setting: ui::settings::Setting,
     /// Set when the cursor lands on a row, cleared once the prefetch has run.
     pub rested_at: Option<u64>,
     pub last_state_write: u64,
@@ -954,6 +977,8 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             lyrics: crate::lyrics::LyricsPane::default(),
             liked_overrides: HashMap::new(),
             like_intents: crate::likes::Likes::default(),
+            focus_mode: crate::focus::FocusMode::default(),
+            created_playlists: Vec::new(),
             notifications: Vec::new(),
             last_notification: None,
             help_scroll: ui::popup::Scroll::default(),
@@ -966,6 +991,8 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             theme_controller,
             art: art_box,
             mpris: Arc::new(Mutex::new(None)),
+            mini_view: None,
+            selected_setting: ui::settings::Setting::default(),
             rested_at: None,
             last_state_write: clock(),
             pending_g: false,
@@ -1364,6 +1391,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     }
 
     fn cancel_account_reads(&mut self) {
+        self.focus_mode.stop();
         self.deps.session_generation.fetch_add(1, Ordering::SeqCst);
         self.account_request.cancel();
         for request in self.page_requests.values_mut() {
@@ -1386,6 +1414,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         self.session_logged_out = false;
         self.liked_overrides.clear();
         self.like_intents.forget_account();
+        self.created_playlists.clear();
         self.home.replace(Page::new("Home", Vec::new()));
         self.search.replace(Page::new("Search", Vec::new()));
         self.library.replace(Page::new("Library", Vec::new()));
@@ -1471,6 +1500,19 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         self.art.image_picker = Some(image_picker);
     }
 
+    pub fn show_mini(&mut self) {
+        let mut view = crate::mini::MiniView::new(&self.deps.config);
+        view.set_owned(true);
+        view.replace_player_state(&self.player_state);
+        view.set_focus_active(self.focus_mode.active());
+        self.mini_view = Some(view);
+        self.interaction.focus(PageFocus::Browse);
+        self.eq.hide();
+        self.scrub = None;
+        self.pending_g = false;
+        self.screen.touch();
+    }
+
     // ----------------------------------------------------------------- keys
 
     /// Every key from the table in `keys`, with the search box and the help
@@ -1478,6 +1520,19 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     pub fn handle_key(&mut self, key_event: KeyEvent) {
         self.screen.touch();
         self.last_input_millis = clock();
+        if self.mini_view.is_some() {
+            if key_event.code == KeyCode::Char('F')
+                && !key_event
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+            {
+                self.mini_view = None;
+            } else {
+                let command = self.mini_view.as_mut().and_then(|view| view.key(key_event));
+                self.settle_mini_input(command);
+            }
+            return;
+        }
         if self.account_picker_visible() {
             self.account_picker_key(key_event);
             return;
@@ -1510,7 +1565,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         match self.prompt() {
             Some(Prompt::Find(_)) => return self.find_key(key_event),
             Some(Prompt::Volume(_)) => return self.volume_key(key_event),
-            Some(Prompt::ClearQueue(_)) | Some(Prompt::Logout(_)) => {
+            Some(Prompt::ClearQueue(_) | Prompt::Logout(_)) => {
                 return self.confirmation_key(key_event);
             }
             None => {}
@@ -1548,13 +1603,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         if self.tab == Tab::Themes && self.themes_key(key_event) {
             return;
         }
-        if self.tab == Tab::Settings
-            && !key_event
-                .modifiers
-                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
-            && matches!(key_event.code, KeyCode::Enter | KeyCode::Char(' '))
-        {
-            self.toggle_search_vim();
+        if self.tab == Tab::Settings && self.settings_key(key_event) {
             return;
         }
         let decoded_action = match self.search_focused() {
@@ -1604,6 +1653,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     /// A resize invalidates any pointer gesture measured against the old frame.
     pub fn resized(&mut self) {
         self.scrub = None;
+        if let Some(view) = self.mini_view.as_mut() {
+            view.clear_hits();
+        }
         self.screen.touch();
     }
 
@@ -1675,7 +1727,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             KeyCode::Char('G') | KeyCode::End => picker.selected_playlist_index = last_row_index,
             KeyCode::Tab => picker.swap_subject(),
             KeyCode::Enter if picker.selected_playlist().is_some() => self.choose_playlist(),
-            KeyCode::Enter if !picker.remove_mode() => picker.new_playlist_name_input = Some(String::new()),
+            KeyCode::Enter if picker.can_create() => picker.new_playlist_name_input = Some(String::new()),
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('P') | KeyCode::Char('D') => {
                 self.close_overlay();
             }
@@ -1813,6 +1865,241 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         }
     }
 
+    fn settings_key(&mut self, key_event: KeyEvent) -> bool {
+        if key_event
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return false;
+        }
+        use ui::settings::Setting;
+        match key_event.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.selected_setting = self.selected_setting.next(false);
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.selected_setting = self.selected_setting.next(true);
+            }
+            KeyCode::Home => self.selected_setting = Setting::ALL[0],
+            KeyCode::End => self.selected_setting = Setting::FocusPlaylist,
+            KeyCode::Enter | KeyCode::Char(' ') => match self.selected_setting {
+                Setting::SearchEditing => self.toggle_search_vim(),
+                Setting::MiniPlayer => self.show_mini(),
+                Setting::FocusMode => self.toggle_focus_setting(),
+                Setting::FocusPlaylist => self.choose_focus_destination(self.focus_mode.active()),
+            },
+            _ => return false,
+        }
+        true
+    }
+
+    pub fn focus_active(&self) -> bool {
+        self.focus_mode.active()
+    }
+
+    fn toggle_focus_setting(&mut self) {
+        if self.focus_mode.active() {
+            self.focus_mode.stop();
+            self.notify("Focus mode off", Some("Focus mode"), Level::Info);
+            return;
+        }
+        if !self.source.signed_in() || self.session_logged_out {
+            self.notify("Sign in to use focus mode", Some("Focus mode"), Level::Warning);
+            return;
+        }
+        if self.player_state.repeat == Repeat::One {
+            self.notify(
+                "Choose repeat off or repeat queue before starting focus mode",
+                Some("Focus mode"),
+                Level::Warning,
+            );
+            return;
+        }
+        if let Some(playlist_id) = self.deps.config.focus_playlist_id.clone() {
+            self.start_focus_mode(Playlist {
+                title: self
+                    .deps
+                    .config
+                    .focus_playlist_title
+                    .clone()
+                    .unwrap_or_else(|| playlist_id.clone()),
+                playlist_id,
+                subtitle: None,
+                thumbnail_url: None,
+            });
+            return;
+        }
+        self.choose_focus_destination(true);
+    }
+
+    fn choose_focus_destination(&mut self, start: bool) {
+        if !self.source.signed_in() || self.session_logged_out {
+            self.notify(
+                "Sign in to choose a focus playlist",
+                Some("Focus mode"),
+                Level::Warning,
+            );
+            return;
+        }
+        let playlists = self.account_playlists();
+        let needs_library = playlists.is_empty();
+        let selected_playlist_index = playlists
+            .iter()
+            .position(|playlist| {
+                Some(
+                    playlist
+                        .playlist_id
+                        .strip_prefix("VL")
+                        .unwrap_or(&playlist.playlist_id),
+                ) == self.deps.config.focus_playlist_id.as_deref()
+            })
+            .unwrap_or(0);
+        self.eq.hide();
+        self.open_overlay(Overlay::PlaylistPicker(Box::new(PlaylistPicker {
+            playlists,
+            selected_playlist_index,
+            primary_subject: Subject {
+                label: if start {
+                    "Choose a playlist for focus mode"
+                } else {
+                    "Choose the focus playlist"
+                }
+                .to_string(),
+                edit: Edit::FocusDestination { start },
+            },
+            alternate_subject: None,
+            new_playlist_name_input: None,
+        })));
+        if needs_library {
+            self.load_page(Target::Library, Some("library".to_string()), false);
+            self.refresh_picker_playlists();
+        }
+    }
+
+    fn start_focus_mode(&mut self, playlist: Playlist) {
+        if !self.source.signed_in() || self.session_logged_out {
+            self.notify("Sign in to use focus mode", Some("Focus mode"), Level::Warning);
+            return;
+        }
+        if let Err(error) = self.deps.config.set_focus_playlist(&playlist) {
+            self.notify(error, Some("Settings"), Level::Error);
+            return;
+        }
+        // Read after persistence so a song started during the write cannot count as a full play.
+        let state = self.player.snapshot();
+        if state.repeat == Repeat::One {
+            self.notify(
+                "Choose repeat off or repeat queue before starting focus mode",
+                Some("Focus mode"),
+                Level::Warning,
+            );
+            return;
+        }
+        let destination = Playlist {
+            playlist_id: self
+                .deps
+                .config
+                .focus_playlist_id
+                .clone()
+                .expect("the playlist was saved"),
+            title: self
+                .deps
+                .config
+                .focus_playlist_title
+                .clone()
+                .unwrap_or(playlist.title),
+            ..playlist
+        };
+        let title = destination.title.clone();
+        self.focus_mode.start(destination, &state);
+        self.notify(
+            format!("Focus mode on. Full plays from the next song will be saved to {title}."),
+            Some("Focus mode"),
+            Level::Info,
+        );
+    }
+
+    fn pump_focus(&mut self) {
+        let Some((request, destination, track)) = self.focus_mode.next_request() else {
+            return;
+        };
+        let source = self.source.clone();
+        let events = self.events.clone();
+        let task = self.background_tasks.spawn(async move {
+            let result = crate::focus::append(source.as_ref(), &destination, &track).await;
+            let _ = events.send(AppEvent::FocusSaved { request, result });
+        });
+        self.focus_mode.hold(request, task);
+    }
+
+    fn settle_mini_input(&mut self, command: Option<MiniAction>) {
+        let Some(view) = self.mini_view.as_mut() else {
+            return;
+        };
+        self.quit |= view.closed();
+        if view.take_full_request() {
+            self.mini_view = None;
+            return;
+        }
+        let Some(command) = command else {
+            return;
+        };
+        view.preview(&command);
+        match command {
+            MiniAction::TogglePause => self.act(Action::TogglePause),
+            MiniAction::Previous => self.act(Action::PreviousTrack),
+            MiniAction::Next => self.act(Action::NextTrack),
+            MiniAction::SeekTo(position) => {
+                self.command(move |playback| async move { playback.seek_to(position).await });
+            }
+            MiniAction::SetVolume(volume) => {
+                self.command(move |playback| async move {
+                    playback.set_volume(volume).await?;
+                    if volume > 0 && playback.snapshot().muted {
+                        playback.toggle_mute().await?;
+                    }
+                    Ok(())
+                });
+            }
+            MiniAction::SetShuffle(shuffle) => {
+                self.command(move |playback| async move { playback.set_shuffle(shuffle).await });
+            }
+            MiniAction::SetRepeat(repeat) => {
+                self.command(move |playback| async move { playback.set_repeat(repeat).await });
+            }
+            MiniAction::Play(id) => self.play_mini_entry(&id),
+        }
+    }
+
+    fn play_mini_entry(&mut self, id: &str) {
+        let state = self.playback.snapshot();
+        if let Some(entry_id) = id.strip_prefix("/org/redwax/track/")
+            && let Some(entry) = state
+                .queue_entries
+                .iter()
+                .find(|entry| entry.id().to_string() == entry_id)
+        {
+            let entry_id = entry.id();
+            let revision = state.queue_revision;
+            self.command(
+                move |playback| async move { playback.jump_entry(entry_id, revision).await.map(|_| ()) },
+            );
+            return;
+        }
+        if !state.queue_entries.is_empty() || !self.playback.restored_pending() {
+            return;
+        }
+        let Some(index) = id
+            .strip_prefix("restored:")
+            .and_then(|index| index.parse::<usize>().ok())
+        else {
+            return;
+        };
+        if index < state.queue.len() {
+            self.command(move |playback| async move { playback.select(index, state.position).await });
+        }
+    }
+
     // --------------------------------------------------------------- mouse
 
     /// Every button and the wheel, against the regions the last frame left.
@@ -1820,6 +2107,12 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     /// the pointer rather than lagging one action behind it.
     pub fn handle_mouse(&mut self, mouse_event: MouseEvent) {
         self.last_input_millis = clock();
+        if self.mini_view.is_some() {
+            self.screen.touch();
+            let command = self.mini_view.as_mut().and_then(|view| view.mouse(mouse_event));
+            self.settle_mini_input(command);
+            return;
+        }
         let (column, row) = (mouse_event.column, mouse_event.row);
         if let Some((_, scroll)) = self.notification_popup_mut() {
             match mouse_event.kind {
@@ -1995,7 +2288,22 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 self.switch_tab(Tab::Search);
                 self.focus_search();
             }
-            Hit::ToggleSearchVim => self.toggle_search_vim(),
+            Hit::ToggleSearchVim => {
+                self.selected_setting = ui::settings::Setting::SearchEditing;
+                self.toggle_search_vim();
+            }
+            Hit::OpenMiniPlayer => {
+                self.selected_setting = ui::settings::Setting::MiniPlayer;
+                self.show_mini();
+            }
+            Hit::ToggleFocusSetting => {
+                self.selected_setting = ui::settings::Setting::FocusMode;
+                self.toggle_focus_setting();
+            }
+            Hit::ChooseFocusPlaylist => {
+                self.selected_setting = ui::settings::Setting::FocusPlaylist;
+                self.choose_focus_destination(self.focus_mode.active());
+            }
             Hit::Crumb(depth) => {
                 let navigation_changed = self
                     .active_browser_mut()
@@ -3344,17 +3652,52 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             .collect()
     }
 
+    fn merge_created_playlists(&self, page: &mut Page) {
+        for playlist in &self.created_playlists {
+            if contains_playlist(page, playlist) {
+                continue;
+            }
+            if let Some(shelf) = page.shelves.iter_mut().find(|shelf| shelf.title == "Playlists") {
+                shelf.items.insert(0, Item::Playlist(playlist.clone()));
+            } else {
+                page.shelves
+                    .push(Shelf::new("Playlists", vec![Item::Playlist(playlist.clone())]));
+            }
+        }
+    }
+
     fn refresh_picker_playlists(&mut self) {
         let playlists = self.account_playlists();
+        let library_loading = self.library.busy() || self.page_loaders.contains_key(&Target::Library);
+        let configured_playlist = self.deps.config.focus_playlist_id.clone();
         let Some(picker) = self.playlist_picker_mut() else {
             return;
         };
         let selected_playlist_id = picker
             .selected_playlist()
-            .map(|playlist| playlist.playlist_id.clone());
+            .map(|playlist| playlist.playlist_id.clone())
+            .or_else(|| {
+                if picker.focus_destination() {
+                    configured_playlist
+                } else {
+                    None
+                }
+            });
         let selected_new_playlist =
-            !picker.remove_mode() && picker.selected_playlist_index == picker.playlists.len();
+            picker.can_create() && picker.selected_playlist_index == picker.playlists.len();
         picker.playlists = playlists;
+        if picker.focus_destination() {
+            picker.primary_subject.label = if picker.playlists.is_empty() {
+                if library_loading {
+                    "Loading your playlists..."
+                } else {
+                    "No playlists found. Create a playlist in YouTube Music, then try again."
+                }
+            } else {
+                "Choose a playlist for focus mode"
+            }
+            .to_string();
+        }
         picker.selected_playlist_index = match selected_playlist_id {
             Some(playlist_id) => picker
                 .playlists
@@ -3373,6 +3716,21 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let Some(playlist) = picker.selected_playlist().cloned() else {
             return;
         };
+        if let Edit::FocusDestination { start } = &picker.primary_subject.edit {
+            if *start {
+                self.start_focus_mode(playlist);
+            } else {
+                match self.deps.config.set_focus_playlist(&playlist) {
+                    Ok(()) => self.notify(
+                        format!("Focus playlist: {}", playlist.title),
+                        Some("Focus mode"),
+                        Level::Info,
+                    ),
+                    Err(error) => self.notify(error, Some("Settings"), Level::Error),
+                }
+            }
+            return;
+        }
         let Subject {
             label: subject_label,
             edit: playlist_edit,
@@ -3381,6 +3739,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let event_sender = self.events.clone();
         self.background_tasks.spawn(async move {
             let (notification_text, notification_level) = match playlist_edit {
+                Edit::FocusDestination { .. } => return,
                 Edit::Add(addition) => add_tracks(source.as_ref(), &playlist, addition, &subject_label).await,
                 Edit::Remove(track) => {
                     let removal_result =
@@ -3403,8 +3762,6 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         });
     }
 
-    /// Make the playlist the picker named, holding what the picker was adding.
-    /// The library is fetched again once it exists, so the next picker lists it.
     fn create_playlist(&mut self) {
         let Some(picker) = self.take_playlist_picker() else {
             return;
@@ -3427,6 +3784,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         };
         let source = self.source.clone();
         let event_sender = self.events.clone();
+        let generation = self.deps.session_generation.load(Ordering::SeqCst);
         self.background_tasks.spawn(async move {
             let creation_result = match addition_ids(source.as_ref(), addition).await {
                 Ok(video_ids) => source
@@ -3436,8 +3794,16 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 Err(error) => Err(error),
             };
             let (notification_text, notification_level) = match creation_result {
-                Ok(_) => {
-                    let _ = event_sender.send(AppEvent::PlaylistCreated);
+                Ok(playlist_id) => {
+                    let _ = event_sender.send(AppEvent::PlaylistCreated {
+                        generation,
+                        playlist: Playlist {
+                            playlist_id,
+                            title: playlist_name.clone(),
+                            subtitle: None,
+                            thumbnail_url: None,
+                        },
+                    });
                     (format!("Made {playlist_name} with {subject_label}"), Level::Info)
                 }
                 Err(error) => (error, Level::Error),
@@ -3577,6 +3943,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     return;
                 };
                 self.browser_mut(target).set_busy(false);
+                if target == Target::Library {
+                    self.refresh_picker_playlists();
+                }
                 if rejected
                     && !fetch_context.retry_attempted
                     && self.refresh_session(Some(Retry::Page(target, request_id)))
@@ -3769,6 +4138,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 self.cancel_account_reads();
                 self.liked_overrides.clear();
                 self.like_intents.forget_account();
+                self.created_playlists.clear();
                 if self.deps.page_cache.clear().is_err() {
                     self.notify(
                         "Old page cache could not be cleared.",
@@ -3953,11 +4323,47 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 self.browser_mut(target).restore_removal(removal);
                 self.notify(error, Some("Playlist"), Level::Error);
             }
-            AppEvent::PlaylistCreated => {
-                self.load_page(Target::Library, Some("library".to_string()), false);
+            AppEvent::PlaylistCreated { generation, playlist } => {
+                if generation != self.deps.session_generation.load(Ordering::SeqCst) {
+                    return;
+                }
+                self.created_playlists
+                    .retain(|created| created.playlist_id != playlist.playlist_id);
+                self.created_playlists.push(playlist);
+                let mut page = self
+                    .library
+                    .pages()
+                    .next()
+                    .cloned()
+                    .unwrap_or_else(|| Page::new("Library", Vec::new()));
+                self.merge_created_playlists(&mut page);
+                self.library.refresh_root(page, Some("library".to_owned()));
+                self.cache_page(Target::Library, "library".to_owned());
+                self.refresh_picker_playlists();
             }
             AppEvent::SessionRefreshed { error, retry } => self.session_refreshed(error, retry),
             AppEvent::PlayerChanged(state) => self.player_changed(state),
+            AppEvent::FocusSaved { request, result } => {
+                if let Some(track) = self.focus_mode.complete(request, &result) {
+                    match result {
+                        Ok(PlaylistAdd::Added) => self.notify(
+                            format!("{} saved to your focus playlist", track.title),
+                            Some("Focus mode"),
+                            Level::Info,
+                        ),
+                        Ok(PlaylistAdd::AlreadyPresent) => {}
+                        Err(error) => {
+                            self.focus_mode.stop();
+                            self.notify(
+                                format!("Focus mode stopped. Could not save {}: {error}", track.title),
+                                Some("Focus mode"),
+                                Level::Error,
+                            );
+                        }
+                    }
+                    self.pump_focus();
+                }
+            }
             AppEvent::PaletteChanged { request, palette } => {
                 if let Some(theme) =
                     self.theme_controller
@@ -4096,6 +4502,19 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     != previous_track.as_ref().map(|track| &track.video_id)
         });
         self.player_state = coordinated_state;
+        if let Some(view) = self.mini_view.as_mut() {
+            view.replace_player_state(&self.player_state);
+        }
+        if self.focus_mode.active() && self.player_state.repeat == Repeat::One {
+            self.focus_mode.stop();
+            self.notify(
+                "Focus mode stopped. Repeat track does not report full-play completions.",
+                Some("Focus mode"),
+                Level::Warning,
+            );
+        }
+        self.focus_mode.observe(&self.player_state);
+        self.pump_focus();
         if checkpoint_due {
             let checkpoint_state = self.player_state.clone();
             let pending_checkpoint = self.deps.state_store.submit(&checkpoint_state);
@@ -4184,6 +4603,12 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         else {
             return;
         };
+        let library_fetch = matches!(&fetch_context.fetch, Fetch::Library);
+        if library_fetch {
+            self.created_playlists
+                .retain(|playlist| !contains_playlist(&page, playlist));
+            self.merge_created_playlists(&mut page);
+        }
         self.duration_cache.fill(&mut page);
         let prefetch_tracks: Vec<Track> = page.tracks().take(PREFETCH_TRACKS).cloned().collect();
         let continuation = page.more.clone();
@@ -4193,7 +4618,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             _ => None,
         };
         let browser = self.browser_mut(target);
-        if fetch_context.page_was_shown {
+        if library_fetch && !fetch_context.replace_current_page {
+            browser.refresh_root(page, fetch_context.cache_key.clone());
+        } else if fetch_context.page_was_shown {
             browser.refresh_top(page);
         } else if fetch_context.replace_current_page {
             browser.replace(page);
@@ -4201,7 +4628,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             browser.show_from(page, opened_from);
         }
         browser.set_busy(false);
-        browser.bind_cache_key(fetch_context.cache_key.clone());
+        if !library_fetch || fetch_context.replace_current_page {
+            browser.bind_cache_key(fetch_context.cache_key.clone());
+        }
         if target == Target::Library {
             self.refresh_picker_playlists();
         }
@@ -4417,7 +4846,12 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     }
 
     fn cache_page(&mut self, target: Target, cache_key: String) {
-        let Some(page) = self.browser(target).top().cloned() else {
+        let page = if target == Target::Library && cache_key == "library" {
+            self.library.pages().next()
+        } else {
+            self.browser(target).top()
+        };
+        let Some(page) = page.cloned() else {
             return;
         };
         let Ok(complete_page) = CompletePage::try_from(page) else {
@@ -4476,6 +4910,10 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         // The first frame already put the remembered page on screen, so showing
         // it again here would stack a second copy on the history.
         if let Some(mut page) = cached_page {
+            let library_fetch = matches!(&fetch, Fetch::Library);
+            if library_fetch {
+                self.merge_created_playlists(&mut page);
+            }
             self.duration_cache.fill(&mut page);
             let prefetch_tracks: Vec<Track> = page.tracks().take(PREFETCH_TRACKS).cloned().collect();
             let opened_from = match &fetch {
@@ -4483,14 +4921,18 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 _ => None,
             };
             let browser = self.browser_mut(target);
-            if browser.top() != Some(&page) {
+            if library_fetch && !replace_current_page {
+                browser.refresh_root(page, cache_key.clone());
+            } else if browser.top() != Some(&page) {
                 if replace_current_page {
                     browser.replace(page);
                 } else {
                     browser.show_from(page, opened_from);
                 }
             }
-            self.browser_mut(target).bind_cache_key(cache_key.clone());
+            if !library_fetch || replace_current_page {
+                self.browser_mut(target).bind_cache_key(cache_key.clone());
+            }
             self.player.prefetch(prefetch_tracks);
         }
         self.leave_page(target);
@@ -4705,6 +5147,17 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     /// A frame nothing has changed since is put back from the last one, so an
     /// idle tick costs a copy rather than a layout pass.
     pub fn draw(&mut self, frame: &mut Frame) {
+        let focus_active = self.focus_mode.active();
+        if let Ok(mpris) = self.mpris.lock()
+            && let Some(mpris) = mpris.as_ref()
+        {
+            mpris.set_focus_active(focus_active);
+        }
+        if let Some(view) = self.mini_view.as_mut() {
+            view.set_focus_active(focus_active);
+            view.draw(frame, &self.base_theme);
+            return;
+        }
         let area = frame.area();
         if let Some(previous_frame) = self.screen.restore(area) {
             frame.buffer_mut().clone_from(previous_frame);
@@ -4766,6 +5219,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 sidebar.area,
                 ui::sidebar::SidebarView {
                     current_track: self.player_state.track(),
+                    focus_active: self.focus_mode.active(),
                     upcoming_tracks: &upcoming_tracks,
                     cover_art: ui::sidebar::ArtView {
                         protocol: self.art.render_protocol.as_ref(),
@@ -4817,7 +5271,14 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 ));
             }
         } else if self.tab == Tab::Settings {
-            hit_map.extend(ui::settings::settings(buffer, content, &self.deps.config, &theme));
+            hit_map.extend(ui::settings::settings(
+                buffer,
+                content,
+                &self.deps.config,
+                (self.focus_mode.active(), self.focus_mode.status()),
+                self.selected_setting,
+                &theme,
+            ));
         } else {
             let searchable = self.tab == Tab::Search;
             self.screen
@@ -4909,6 +5370,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     .map(|scrub| (scrub.normalized_fraction * 100.0).round() as u8),
                 volume_entry: volume_entry.as_deref(),
                 current_track_liked,
+                focus_active: self.focus_mode.active(),
                 icons: &icons,
                 theme: &theme,
                 motion,
@@ -4953,6 +5415,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 body,
                 ui::picker::PickerView {
                     remove_mode: picker.remove_mode(),
+                    focus_destination: picker.focus_destination(),
                     primary_item_label: picker.primary_item_label(),
                     alternate_item_label: picker.alternate_item_label(),
                     playlists: &picker.playlists,
@@ -5117,6 +5580,11 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             level,
             expires_at_millis: clock() + level.seconds() * 1000,
         };
+        if matches!(level, Level::Warning | Level::Error)
+            && let Some(view) = self.mini_view.as_mut()
+        {
+            view.fail(&notification.text);
+        }
         self.last_notification = Some(notification.clone());
         self.notifications.push(notification);
         self.screen.touch();
@@ -5175,6 +5643,17 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             )),
         }
     }
+}
+
+fn contains_playlist(page: &Page, playlist: &Playlist) -> bool {
+    let playlist_id = playlist
+        .playlist_id
+        .strip_prefix("VL")
+        .unwrap_or(&playlist.playlist_id);
+    page.shelves.iter().flat_map(|shelf| &shelf.items).any(|item| {
+        matches!(item, Item::Playlist(existing)
+            if existing.playlist_id.strip_prefix("VL").unwrap_or(&existing.playlist_id) == playlist_id)
+    })
 }
 
 /// Every video id an addition names, an album or playlist read to its end.

@@ -36,6 +36,7 @@ pub struct ArtView<'a> {
 
 pub struct SidebarView<'a> {
     pub current_track: Option<&'a Track>,
+    pub focus_active: bool,
     pub upcoming_tracks: &'a [Track],
     pub cover_art: ArtView<'a>,
     pub theme: &'a Theme,
@@ -44,12 +45,13 @@ pub struct SidebarView<'a> {
 
 pub fn sidebar(buffer: &mut Buffer, area: Rect, view: SidebarView<'_>) -> Vec<(Rect, Hit)> {
     let theme = view.theme;
+    let details = theme.playback_details(view.focus_active);
     fill(buffer, area, theme.surface);
     if area.width < 8 || area.height < 4 {
         return Vec::new();
     }
     let content_area = Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 1);
-    let muted = Style::new().fg(theme.muted);
+    let muted = Style::new().fg(details.muted);
     let content_width = content_area.width as usize;
     let content_bottom = content_area.y + content_area.height;
     let mut hit_regions = Vec::new();
@@ -86,7 +88,7 @@ pub fn sidebar(buffer: &mut Buffer, area: Rect, view: SidebarView<'_>) -> Vec<(R
                         view.motion.animation_frame,
                         view.motion.animations_enabled,
                     ),
-                    Style::new().fg(theme.accent).add_modifier(Modifier::BOLD),
+                    Style::new().fg(details.accent).add_modifier(Modifier::BOLD),
                 )],
             );
             put(
@@ -95,7 +97,7 @@ pub fn sidebar(buffer: &mut Buffer, area: Rect, view: SidebarView<'_>) -> Vec<(R
                 next_row_y + 1,
                 vec![span(
                     clip(&track.artist_line(), content_width),
-                    Style::new().fg(theme.foreground),
+                    Style::new().fg(details.foreground),
                 )],
             );
             put(
