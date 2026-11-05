@@ -445,7 +445,13 @@ pub enum AppEvent {
     PlayerChanged(PlayerState),
     FocusSaved {
         request: RequestId,
+        playlist: Playlist,
         result: Result<PlaylistAdd, String>,
+    },
+    PlaylistRefreshed {
+        playlist_id: String,
+        request: RequestId,
+        result: Result<CompletePage, String>,
     },
     /// A session refresh finished. `error` is the reason it did not.
     SessionRefreshed {
@@ -761,6 +767,7 @@ pub struct App<S: MusicSource, P: PlayerControl> {
     /// What each browser last asked for, so a refused fetch can be reissued.
     page_requests: HashMap<Target, RequestSlot<PageFetch>>,
     prefetch_requests: HashMap<String, RequestSlot<()>>,
+    playlist_refreshes: HashMap<String, RequestSlot<Playlist>>,
     /// The partial page each browser is still filling in.
     page_loaders: HashMap<Target, Loader>,
     /// Lengths remembered from earlier visits, shared with the fill tasks.
@@ -1006,6 +1013,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             session_logout_pending: false,
             page_requests: HashMap::new(),
             prefetch_requests: HashMap::new(),
+            playlist_refreshes: HashMap::new(),
             page_loaders: HashMap::new(),
             duration_cache,
             genre_cache,
@@ -1398,6 +1406,9 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             request.cancel();
         }
         for request in self.prefetch_requests.values_mut() {
+            request.cancel();
+        }
+        for request in self.playlist_refreshes.values_mut() {
             request.cancel();
         }
         self.page_loaders.clear();
@@ -1985,7 +1996,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             self.notify(error, Some("Settings"), Level::Error);
             return;
         }
-        // Read after persistence so a song started during the write cannot count as a full play.
+        // Snapshot completed history after persistence so earlier finishes are not collected.
         let state = self.player.snapshot();
         if state.repeat == Repeat::One {
             self.notify(
@@ -2013,7 +2024,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let title = destination.title.clone();
         self.focus_mode.start(destination, &state);
         self.notify(
-            format!("Focus mode on. Full plays from the next song will be saved to {title}."),
+            format!("Focus mode on. Full plays will be saved to {title}."),
             Some("Focus mode"),
             Level::Info,
         );
@@ -2027,9 +2038,123 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let events = self.events.clone();
         let task = self.background_tasks.spawn(async move {
             let result = crate::focus::append(source.as_ref(), &destination, &track).await;
-            let _ = events.send(AppEvent::FocusSaved { request, result });
+            let _ = events.send(AppEvent::FocusSaved {
+                request,
+                playlist: destination,
+                result,
+            });
         });
         self.focus_mode.hold(request, task);
+    }
+
+    fn refresh_saved_playlist(&mut self, playlist: Playlist, saved_video_id: String) {
+        let cache_key = format!("playlist:{}", playlist.playlist_id);
+        if let Some(prefetch) = self.prefetch_requests.get_mut(&cache_key) {
+            prefetch.cancel();
+        }
+        self.deps.page_cache.remove(&cache_key);
+        let slot = self
+            .playlist_refreshes
+            .entry(playlist.playlist_id.clone())
+            .or_default();
+        let request = slot.begin(playlist.clone());
+        let source = self.source.clone();
+        let events = self.events.clone();
+        let playlist_id = playlist.playlist_id.clone();
+        let task = self.background_tasks.spawn(async move {
+            let result = crate::focus::refreshed_playlist(source.as_ref(), &playlist, &saved_video_id).await;
+            let _ = events.send(AppEvent::PlaylistRefreshed {
+                playlist_id,
+                request,
+                result,
+            });
+        });
+        slot.hold(request, task);
+    }
+
+    fn playlist_refreshed(
+        &mut self,
+        playlist_id: String,
+        request: RequestId,
+        result: Result<CompletePage, String>,
+    ) {
+        let Some(slot) = self.playlist_refreshes.get_mut(&playlist_id) else {
+            return;
+        };
+        let Some(playlist) = slot.complete(request).cloned() else {
+            return;
+        };
+        slot.cancel();
+        let cache_key = format!("playlist:{playlist_id}");
+        let page = match result {
+            Ok(page) => page,
+            Err(error) => {
+                self.deps.page_cache.remove(&cache_key);
+                if let Some(prefetch) = self.prefetch_requests.get_mut(&cache_key) {
+                    prefetch.cancel();
+                }
+                self.notify(
+                    format!("Song saved, but could not refresh {}: {error}", playlist.title),
+                    Some("Playlist"),
+                    Level::Warning,
+                );
+                return;
+            }
+        };
+        let mut page = page.into_page();
+        self.duration_cache.fill(&mut page);
+        let tracks: Vec<_> = page.tracks().cloned().collect();
+        let mut loaded_prefix: Option<usize> = None;
+        for target in [Target::Home, Target::Search, Target::Library] {
+            let reading_playlist = self
+                .page_requests
+                .get(&target)
+                .and_then(RequestSlot::current)
+                .is_some_and(|(_, context)| context.cache_key.as_deref() == Some(cache_key.as_str()));
+            let showing_playlist = self.browser(target).open_playlist().is_some_and(|playlist| {
+                playlist
+                    .playlist_id
+                    .strip_prefix("VL")
+                    .unwrap_or(&playlist.playlist_id)
+                    == playlist_id
+            });
+            if reading_playlist && showing_playlist {
+                if self
+                    .page_loaders
+                    .get(&target)
+                    .is_some_and(|loader| loader.page_key == cache_key)
+                {
+                    let loaded: Vec<_> = self
+                        .browser(target)
+                        .top()
+                        .into_iter()
+                        .flat_map(Page::tracks)
+                        .collect();
+                    if tracks.len() >= loaded.len()
+                        && loaded
+                            .iter()
+                            .zip(&tracks)
+                            .all(|(old, new)| old.video_id == new.video_id)
+                    {
+                        loaded_prefix = Some(loaded_prefix.unwrap_or(0).max(loaded.len()));
+                    }
+                }
+                self.leave_page(target);
+            }
+        }
+        // Completing an existing page producer must not enqueue the prefix again.
+        if let Some(prefix_length) = loaded_prefix {
+            self.queue_arrivals(&cache_key, &tracks[prefix_length..]);
+        }
+        for browser in [&mut self.home, &mut self.search, &mut self.library] {
+            browser.refresh_playlist(&playlist_id, &page);
+        }
+        if let Some(prefetch) = self.prefetch_requests.get_mut(&cache_key) {
+            prefetch.cancel();
+        }
+        if let Ok(page) = CompletePage::try_from(page) {
+            self.deps.page_cache.put(&cache_key, &page);
+        }
     }
 
     fn settle_mini_input(&mut self, command: Option<MiniAction>) {
@@ -4343,15 +4468,24 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             }
             AppEvent::SessionRefreshed { error, retry } => self.session_refreshed(error, retry),
             AppEvent::PlayerChanged(state) => self.player_changed(state),
-            AppEvent::FocusSaved { request, result } => {
+            AppEvent::FocusSaved {
+                request,
+                playlist,
+                result,
+            } => {
                 if let Some(track) = self.focus_mode.complete(request, &result) {
                     match result {
-                        Ok(PlaylistAdd::Added) => self.notify(
-                            format!("{} saved to your focus playlist", track.title),
-                            Some("Focus mode"),
-                            Level::Info,
-                        ),
-                        Ok(PlaylistAdd::AlreadyPresent) => {}
+                        Ok(PlaylistAdd::Added) => {
+                            self.refresh_saved_playlist(playlist, track.video_id.clone());
+                            self.notify(
+                                format!("{} saved to your focus playlist", track.title),
+                                Some("Focus mode"),
+                                Level::Info,
+                            );
+                        }
+                        Ok(PlaylistAdd::AlreadyPresent) => {
+                            self.refresh_saved_playlist(playlist, track.video_id.clone());
+                        }
                         Err(error) => {
                             self.focus_mode.stop();
                             self.notify(
@@ -4363,6 +4497,13 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     }
                     self.pump_focus();
                 }
+            }
+            AppEvent::PlaylistRefreshed {
+                playlist_id,
+                request,
+                result,
+            } => {
+                self.playlist_refreshed(playlist_id, request, result);
             }
             AppEvent::PaletteChanged { request, palette } => {
                 if let Some(theme) =

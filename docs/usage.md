@@ -566,10 +566,10 @@ Focus mode has no keyboard shortcut outside Settings.
 The main player and `redwax mini` show a red **FOCUS ON** label while focus
 mode is active. Track details, transport controls, volume and progress turn
 red in both views. The sidebar track title, artist and album also turn red.
-Collection starts with the next song.
-A song already playing when you activate focus mode does not qualify until
-you play it again from the start. Pausing does not disqualify a song. Skips,
-seeks, playback errors and songs resumed partway through do not qualify.
+The currently playing song can qualify when it ends naturally if it has
+played from the beginning without skips or seeks. Songs completed before
+focus mode was enabled are not added. Pausing does not disqualify a song.
+Skips, seeks, playback errors and songs resumed partway through do not qualify.
 
 Use repeat off or repeat queue with focus mode. Turning on repeat track stops
 focus mode because [mpv repeats a single track by seeking](https://mpv.io/manual/stable/#options-loop-file).

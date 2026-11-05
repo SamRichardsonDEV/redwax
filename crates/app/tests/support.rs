@@ -1602,6 +1602,8 @@ pub fn parse_key(key: &str) -> KeyEvent {
         "right" => KeyCode::Right,
         "up" => KeyCode::Up,
         "down" => KeyCode::Down,
+        "home" => KeyCode::Home,
+        "end" => KeyCode::End,
         other => KeyCode::Char(other.chars().next().expect("a key name is never empty")),
     };
     KeyEvent {

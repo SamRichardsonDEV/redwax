@@ -3,7 +3,7 @@
 use std::collections::{HashSet, VecDeque};
 
 use redwax_player::PlayerState;
-use redwax_ytm::{MusicSource, Playlist, PlaylistAdd, Track};
+use redwax_ytm::{Browsable, CompletePage, MusicSource, Playlist, PlaylistAdd, Track, collect_page};
 use tokio::task::AbortHandle;
 
 use crate::request::{RequestId, RequestSlot};
@@ -31,7 +31,7 @@ impl FocusMode {
     pub fn start(&mut self, destination: Playlist, state: &PlayerState) {
         self.stop();
         self.destination = Some(destination);
-        self.completed_sequence = state.playback_sequence;
+        self.completed_sequence = state.completed_tracks.back().map_or(0, |(sequence, _)| *sequence);
         self.status = Some("Waiting for a full play".to_string());
     }
 
@@ -116,6 +116,34 @@ pub(crate) async fn append(
         .map_err(|error| error.to_string())
 }
 
+pub(crate) async fn refreshed_playlist(
+    source: &impl MusicSource,
+    destination: &Playlist,
+    saved_video_id: &str,
+) -> Result<CompletePage, String> {
+    for attempt in 0..3 {
+        let page = source
+            .browse(&Browsable::Playlist(destination.clone()))
+            .await
+            .map_err(|error| error.to_string())?;
+        let page = collect_page(source, page)
+            .await
+            .map_err(|incomplete| incomplete.error.to_string())?;
+        if page
+            .as_page()
+            .tracks()
+            .any(|track| track.video_id == saved_video_id)
+        {
+            return Ok(page);
+        }
+        if attempt < 2 {
+            // A successful edit can precede its appearance in playlist reads.
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    }
+    Err("YouTube has not shown the saved song in this playlist yet".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,5 +219,24 @@ mod tests {
         state.completed_tracks.push_back((2, track));
         focus.observe(&state);
         assert!(focus.next_request().is_some());
+    }
+
+    #[test]
+    fn the_current_full_play_qualifies_but_already_completed_history_does_not() {
+        let mut focus = FocusMode::default();
+        let mut state = PlayerState {
+            playback_sequence: 4,
+            completed_tracks: VecDeque::from([(3, redwax_player::bare_track("old", "Earlier song"))]),
+            ..PlayerState::default()
+        };
+        focus.start(destination(), &state);
+        focus.observe(&state);
+        assert!(focus.next_request().is_none());
+        state
+            .completed_tracks
+            .push_back((4, redwax_player::bare_track("current", "Current song")));
+        focus.observe(&state);
+        let (_, _, track) = focus.next_request().unwrap();
+        assert_eq!(track.video_id, "current");
     }
 }

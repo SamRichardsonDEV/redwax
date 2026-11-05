@@ -28,7 +28,9 @@ fn options(dir: &str) -> PlayerOptions {
 }
 
 fn temp_dir(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("redwax-player-{}-{name}", std::process::id()));
+    static NEXT_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
+    let sequence = NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("redwax-player-{}-{name}-{sequence}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("test socket directory");
     dir
@@ -750,7 +752,12 @@ async fn command_seeks_and_saved_positions_disqualify_the_current_full_play() {
         .bookkeeping
         .lock()
         .expect("bookkeeping")
-        .pending_resume = Some((1, song.video_id.clone(), 30.0, crate::PlaybackIntent::Play));
+        .pending_resume = Some((
+        player.inner.playback_generation.load(Ordering::SeqCst),
+        song.video_id.clone(),
+        30.0,
+        crate::PlaybackIntent::Play,
+    ));
     player
         .inner
         .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
@@ -989,6 +996,176 @@ async fn eof_verification_cannot_override_a_seek_stop_or_playback_error() {
         player.inner.wait_for_tasks().await;
         assert!(player.snapshot().completed_tracks.is_empty(), "{interruption}");
     }
+}
+
+#[tokio::test]
+async fn cancelling_a_resume_then_jumping_to_the_same_song_allows_a_new_full_play() {
+    let player = Player::new(options("focus-cancel-resume"), Some(TestSource::default()));
+    let mpv = FakeMpv::with_playlist(&[]);
+    player.inner.set_ipc(mpv.clone());
+    let song = track("focus", "Focus song");
+    player
+        .play_from(vec![song.clone(), song.clone()], 0, 30.0)
+        .await
+        .expect("begin a saved-position resume");
+    let target = TestSource::stream_for("focus").target;
+    let playlist = json!([
+        {"id": 1, "filename": target, "current": true},
+        {"id": 2, "filename": target},
+    ]);
+    *mpv.playlist.lock().expect("fake playlist") = playlist.as_array().unwrap().clone();
+    player.inner.handle_event(&change("playlist", playlist));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+
+    player
+        .jump(1)
+        .await
+        .expect("cancel the old resume and start the duplicate from zero");
+    assert!(
+        player
+            .inner
+            .bookkeeping
+            .lock()
+            .expect("bookkeeping")
+            .pending_resume
+            .is_none()
+    );
+    {
+        let mut playlist = mpv.playlist.lock().expect("fake playlist");
+        playlist[0]["current"] = json!(false);
+        playlist[1]["current"] = json!(true);
+    }
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 2}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.inner.wait_for_tasks().await;
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 2}));
+
+    assert_eq!(
+        player.snapshot().completed_tracks.into_iter().collect::<Vec<_>>(),
+        [(2, song)]
+    );
+    assert!(!mpv.calls().iter().any(|call| call[0] == json!("seek")));
+}
+
+#[tokio::test]
+async fn a_late_stale_resume_cannot_disqualify_a_loaded_track_before_its_metadata_arrives() {
+    let player = quiet_player();
+    let song = track("focus", "Focus song");
+    player.inner.remember(std::slice::from_ref(&song));
+    let generation = player.inner.begin_playback();
+    player
+        .inner
+        .bookkeeping
+        .lock()
+        .expect("bookkeeping")
+        .pending_resume = Some((
+        generation - 1,
+        song.video_id.clone(),
+        30.0,
+        crate::PlaybackIntent::Play,
+    ));
+
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.inner.handle_event(&playlist_event(&[(1, song.url())]));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+    player.inner.wait_for_tasks().await;
+
+    assert!(
+        player
+            .inner
+            .bookkeeping
+            .lock()
+            .expect("bookkeeping")
+            .pending_resume
+            .is_none()
+    );
+    assert_eq!(
+        player.snapshot().completed_tracks.into_iter().collect::<Vec<_>>(),
+        [(1, song)]
+    );
+}
+
+#[tokio::test]
+async fn focus_diagnostics_distinguish_completion_from_seek_unloaded_and_unknown_track() {
+    let player = quiet_player();
+    let mpv = FakeMpv::with_playlist(&[]);
+    player.inner.set_ipc(mpv);
+    let stages = Arc::new(Mutex::new(Vec::new()));
+    player.set_timing_sink(Some(Arc::new({
+        let stages = stages.clone();
+        move |_, video_id, stage, _| {
+            stages
+                .lock()
+                .expect("timing stages")
+                .push((video_id.to_string(), stage));
+        }
+    })));
+    let song = track("focus", "Focus song");
+    player.inner.remember(std::slice::from_ref(&song));
+    player.inner.handle_event(&playlist_event(&[(1, song.url())]));
+
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player.seek_to(30.0).await.expect("seek is traced");
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 1}));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 1}));
+    player
+        .inner
+        .handle_event(&json!({"event": "start-file", "playlist_entry_id": 2}));
+    player.inner.handle_event(&json!({"event": "file-loaded"}));
+    player
+        .inner
+        .handle_event(&json!({"event": "end-file", "reason": "eof", "playlist_entry_id": 2}));
+    player.inner.wait_for_tasks().await;
+
+    let stages = stages.lock().expect("timing stages");
+    for expected in [
+        "focus.candidate_created",
+        "focus.candidate_loaded",
+        "focus.completed",
+        "focus.invalidated_seek_command",
+        "focus.eof_without_candidate",
+        "focus.eof_unloaded",
+        "focus.loaded_unknown_track",
+        "focus.eof_unknown_track",
+    ] {
+        assert!(
+            stages.iter().any(|(_, stage)| *stage == expected),
+            "missing {expected}"
+        );
+    }
+    assert!(
+        stages
+            .iter()
+            .all(|(video_id, _)| !video_id.starts_with("https://"))
+    );
 }
 
 #[tokio::test]

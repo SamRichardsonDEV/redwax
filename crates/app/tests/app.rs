@@ -1466,7 +1466,8 @@ async fn test_the_picker_makes_a_new_playlist() {
             .flat_map(|shelf| &shelf.items)
             .any(|item| matches!(item, Item::Playlist(playlist) if playlist.playlist_id == "PLnew"))
     );
-    app.press_all(&["j", "P"]).await;
+    app.playing_queue(tracks(), 1);
+    app.press("P").await;
     assert!(app.screen().contains("Road trip"));
     app.press("enter").await;
     assert!(app.source.called("add_to_playlist:PLnew:v2"));

@@ -2459,6 +2459,7 @@ impl PlayerInner {
         bookkeeping.recovering_mpv_entry_ids.clear();
         bookkeeping.recovery_stage_by_mpv_entry_id.clear();
         bookkeeping.pending_jump = None;
+        bookkeeping.pending_resume = None;
         drop(bookkeeping);
         self.state.send_modify(|state| {
             if self.playback_generation.load(Ordering::SeqCst) == playback_generation {
@@ -2706,10 +2707,7 @@ impl PlayerInner {
 
     async fn command(&self, command_arguments: Vec<Value>) -> Result<Value> {
         if command_arguments.first().and_then(Value::as_str) == Some("seek") {
-            self.bookkeeping
-                .lock()
-                .expect("player bookkeeping state")
-                .full_playback = None;
+            self.invalidate_full_playback("focus.invalidated_seek_command");
         }
         let _lifecycle_transition_guard = self.lifecycle.transition_lock.lock().await;
         let ipc = {
@@ -3473,23 +3471,69 @@ impl PlayerInner {
         self.handle_event(message);
     }
 
+    fn invalidate_full_playback(&self, stage: &'static str) {
+        let candidate = self
+            .bookkeeping
+            .lock()
+            .expect("player bookkeeping state")
+            .full_playback
+            .take();
+        if let Some(candidate) = candidate {
+            let video_id = candidate
+                .track
+                .as_ref()
+                .map_or("unknown", |track| track.video_id.as_str());
+            self.emit_timing(
+                self.playback_generation.load(Ordering::SeqCst),
+                video_id,
+                stage,
+                Duration::ZERO,
+            );
+        }
+    }
+
     fn finish_full_playback(&self, mpv_entry_id: i64, sequence: Option<u64>, reason: &str) {
-        let completed = {
+        let (completed, video_id, stage) = {
             let mut bookkeeping = self.bookkeeping.lock().expect("player bookkeeping state");
             if bookkeeping.full_playback.as_ref().is_some_and(|playback| {
                 playback.mpv_entry_id == mpv_entry_id
                     && sequence.is_none_or(|sequence| playback.sequence == sequence)
             }) {
-                bookkeeping.full_playback.take().and_then(|mut playback| {
-                    playback.track = playback
-                        .track
-                        .or_else(|| bookkeeping.tracks_by_mpv_entry_id.get(&mpv_entry_id).cloned());
-                    playback.complete(reason)
-                })
+                let mut playback = bookkeeping.full_playback.take().expect("candidate matched");
+                playback.track = playback
+                    .track
+                    .or_else(|| bookkeeping.tracks_by_mpv_entry_id.get(&mpv_entry_id).cloned());
+                let video_id = playback
+                    .track
+                    .as_ref()
+                    .map_or_else(|| "unknown".to_string(), |track| track.video_id.clone());
+                let stage = match reason {
+                    "eof" if !playback.loaded => "focus.eof_unloaded",
+                    "eof" if playback.track.is_none() => "focus.eof_unknown_track",
+                    "eof" => "focus.completed",
+                    "error" => "focus.invalidated_error",
+                    "stop" => "focus.invalidated_stop",
+                    "quit" => "focus.invalidated_quit",
+                    "redirect" => "focus.invalidated_redirect",
+                    _ => "focus.invalidated_end",
+                };
+                (playback.complete(reason), video_id, stage)
             } else {
-                None
+                let stage = match (reason, bookkeeping.full_playback.is_some()) {
+                    ("eof", false) => "focus.eof_without_candidate",
+                    ("eof", true) => "focus.eof_stale_candidate",
+                    (_, false) => "focus.end_without_candidate",
+                    (_, true) => "focus.end_stale_candidate",
+                };
+                (None, "unknown".to_string(), stage)
             }
         };
+        self.emit_timing(
+            self.playback_generation.load(Ordering::SeqCst),
+            &video_id,
+            stage,
+            Duration::ZERO,
+        );
         if let Some(completed) = completed {
             self.state.send_modify(|state| {
                 state.completed_tracks.push_back(completed);
@@ -3526,14 +3570,21 @@ impl PlayerInner {
     }
 
     fn handle_event(self: &Arc<Self>, message: &Value) {
-        if message.get("event").and_then(Value::as_str) == Some("end-file")
-            && let Some(mpv_entry_id) = message.get("playlist_entry_id").and_then(Value::as_i64)
-        {
-            self.finish_full_playback(
-                mpv_entry_id,
-                None,
-                message.get("reason").and_then(Value::as_str).unwrap_or_default(),
-            );
+        if message.get("event").and_then(Value::as_str) == Some("end-file") {
+            if let Some(mpv_entry_id) = message.get("playlist_entry_id").and_then(Value::as_i64) {
+                self.finish_full_playback(
+                    mpv_entry_id,
+                    None,
+                    message.get("reason").and_then(Value::as_str).unwrap_or_default(),
+                );
+            } else {
+                self.emit_timing(
+                    self.playback_generation.load(Ordering::SeqCst),
+                    "unknown",
+                    "focus.end_missing_identity",
+                    Duration::ZERO,
+                );
+            }
         }
         match message.get("event").and_then(Value::as_str).unwrap_or_default() {
             "client-message" => {
@@ -3603,10 +3654,36 @@ impl PlayerInner {
                         loaded: false,
                     });
                 });
+                let video_id = self
+                    .bookkeeping
+                    .lock()
+                    .expect("player bookkeeping state")
+                    .full_playback
+                    .as_ref()
+                    .and_then(|playback| playback.track.as_ref())
+                    .map_or_else(|| "unknown".to_string(), |track| track.video_id.clone());
+                self.emit_timing(
+                    self.playback_generation.load(Ordering::SeqCst),
+                    &video_id,
+                    if message.get("playlist_entry_id").and_then(Value::as_i64).is_some() {
+                        "focus.candidate_created"
+                    } else {
+                        "focus.start_missing_identity"
+                    },
+                    Duration::ZERO,
+                );
             }
             "file-loaded" => {
-                {
+                let (video_id, stage) = {
                     let mut bookkeeping = self.bookkeeping.lock().expect("player bookkeeping state");
+                    let generation = self.playback_generation.load(Ordering::SeqCst);
+                    if bookkeeping
+                        .pending_resume
+                        .as_ref()
+                        .is_some_and(|(pending_generation, ..)| *pending_generation != generation)
+                    {
+                        bookkeeping.pending_resume = None;
+                    }
                     let track = bookkeeping.full_playback.as_ref().and_then(|playback| {
                         bookkeeping
                             .tracks_by_mpv_entry_id
@@ -3614,21 +3691,40 @@ impl PlayerInner {
                             .cloned()
                             .or_else(|| playback.track.clone())
                     });
-                    let resuming =
-                        bookkeeping
-                            .pending_resume
-                            .as_ref()
-                            .is_some_and(|(_, video_id, seconds, _)| {
-                                *seconds > 0.0
-                                    && track.as_ref().is_none_or(|track| &track.video_id == video_id)
-                            });
+                    let video_id = track
+                        .as_ref()
+                        .map_or_else(|| "unknown".to_string(), |track| track.video_id.clone());
+                    let resuming = bookkeeping.pending_resume.as_ref().is_some_and(
+                        |(pending_generation, video_id, seconds, _)| {
+                            *pending_generation == generation
+                                && *seconds > 0.0
+                                && track.as_ref().is_none_or(|track| &track.video_id == video_id)
+                        },
+                    );
                     if resuming {
                         bookkeeping.full_playback = None;
+                        (video_id, "focus.invalidated_resume")
                     } else if let Some(playback) = bookkeeping.full_playback.as_mut() {
                         playback.track = track;
                         playback.loaded = true;
+                        (
+                            video_id,
+                            if playback.track.is_some() {
+                                "focus.candidate_loaded"
+                            } else {
+                                "focus.loaded_unknown_track"
+                            },
+                        )
+                    } else {
+                        (video_id, "focus.loaded_without_candidate")
                     }
-                }
+                };
+                self.emit_timing(
+                    self.playback_generation.load(Ordering::SeqCst),
+                    &video_id,
+                    stage,
+                    Duration::ZERO,
+                );
                 self.timing_loaded();
                 self.background_tasks
                     .lock()
@@ -3636,10 +3732,7 @@ impl PlayerInner {
                     .spawn(Arc::clone(self).resume_loaded());
             }
             "seek" => {
-                self.bookkeeping
-                    .lock()
-                    .expect("player bookkeeping state")
-                    .full_playback = None;
+                self.invalidate_full_playback("focus.invalidated_seek_event");
             }
             "property-change" => {
                 let mut tracks_to_prefetch = Vec::new();

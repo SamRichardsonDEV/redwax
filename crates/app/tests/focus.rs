@@ -247,9 +247,13 @@ async fn the_playlist_child_row_is_reached_by_the_next_settings_navigation_step(
 }
 
 #[tokio::test]
-async fn changing_the_nested_playlist_while_active_switches_destination_and_resets_the_full_play_baseline() {
+async fn changing_the_nested_playlist_keeps_the_current_full_play_eligible_and_ignores_completed_history() {
     let mut app = configured("focus-change-active-destination").build();
     app.app.player_state.playback_sequence = 4;
+    app.app
+        .player_state
+        .completed_tracks
+        .push_back((3, song("already-finished")));
     app.playing_queue(vec![song("already-playing")], 0);
     app.settle().await;
     activate(&mut app).await;
@@ -270,12 +274,19 @@ async fn changing_the_nested_playlist_while_active_switches_destination_and_rese
     assert!(setting_row(&app).contains("[On]"));
     complete(
         &mut app,
-        &[(4, song("already-playing")), (5, song("new-destination-song"))],
+        &[
+            (3, song("already-finished")),
+            (4, song("already-playing")),
+            (5, song("new-destination-song")),
+        ],
     )
     .await;
     assert_eq!(
         app.source.playlist_edits(),
-        ["add_to_playlist:PLsecond:new-destination-song"]
+        [
+            "add_to_playlist:PLsecond:already-playing",
+            "add_to_playlist:PLsecond:new-destination-song"
+        ]
     );
 }
 
@@ -376,30 +387,38 @@ async fn the_focus_indicator_is_visible_even_when_nothing_is_playing() {
 }
 
 #[tokio::test]
-async fn only_new_full_plays_are_saved_and_repeated_completion_observations_are_ignored() {
+async fn completed_history_is_ignored_but_the_current_uninterrupted_play_is_saved_once() {
     let mut app = configured("focus-completions").build();
     app.app.player_state.playback_sequence = 4;
+    app.app
+        .player_state
+        .completed_tracks
+        .push_back((3, song("already-finished")));
     app.playing_queue(vec![song("already-playing")], 0);
     app.settle().await;
     activate(&mut app).await;
 
-    let mut skipped = app.app.player_state.clone();
-    skipped.playback_sequence = 5;
-    skipped.position = 0.0;
-    skipped.queue = vec![song("next-song")];
-    skipped.index = Some(0);
-    app.app.handle_event(AppEvent::PlayerChanged(skipped));
+    let mut advanced = app.app.player_state.clone();
+    advanced.playback_sequence = 5;
+    advanced.position = 0.0;
+    advanced.queue = vec![song("next-song")];
+    advanced.index = Some(0);
+    app.app.handle_event(AppEvent::PlayerChanged(advanced));
     app.settle().await;
     assert!(app.source.playlist_edits().is_empty());
 
     complete(
         &mut app,
-        &[(4, song("already-playing")), (5, song("first-full-play"))],
+        &[
+            (3, song("already-finished")),
+            (4, song("already-playing")),
+            (5, song("first-full-play")),
+        ],
     )
     .await;
     complete(
         &mut app,
-        &[(6, song("second-full-play")), (7, song("first-full-play"))],
+        &[(6, song("second-full-play")), (7, song("already-playing"))],
     )
     .await;
     let same_state: PlayerState = app.app.player_state.clone();
@@ -409,6 +428,7 @@ async fn only_new_full_plays_are_saved_and_repeated_completion_observations_are_
     assert_eq!(
         app.source.playlist_edits(),
         [
+            "add_to_playlist:PL1:already-playing",
             "add_to_playlist:PL1:first-full-play",
             "add_to_playlist:PL1:second-full-play"
         ]
@@ -810,4 +830,46 @@ async fn a_failed_post_save_refresh_preserves_the_remote_save_and_keeps_focus_ac
     assert!(app.app.notifications.iter().any(|notice| {
         notice.level == Level::Warning && notice.text.contains("Song saved, but could not refresh")
     }));
+}
+
+#[tokio::test]
+async fn logging_out_cancels_a_pending_focus_refresh_before_it_can_restore_the_old_accounts_playlist() {
+    let mut setup = configured("focus-refresh-logout");
+    let gate = Arc::new(Semaphore::new(1));
+    setup.source = Arc::new(FakeSource {
+        browse_gate: Some(gate.clone()),
+        ..FakeSource::default()
+    });
+    setup
+        .source
+        .playlist_overrides
+        .lock()
+        .unwrap()
+        .insert("PL1".to_string(), vec![tracks()[0].clone()]);
+    let mut app = setup.build();
+    activate(&mut app).await;
+    let old_page = Page::new(
+        "Late night",
+        vec![Shelf::new("Tracks", vec![Item::Track(tracks()[0].clone())])],
+    );
+    open_destination(&mut app.app.home, &old_page);
+    let confirmed_save = await_confirmed_save(&mut app, song("new-focus-song")).await;
+    let blocked_refresh = gate
+        .clone()
+        .try_acquire_owned()
+        .expect("the completed membership check released its permit");
+    app.app.handle_event(confirmed_save);
+    app.settle().await;
+
+    app.app.handle_event(AppEvent::SessionLoggedOut {
+        error: None,
+        reauthenticate: false,
+    });
+    drop(blocked_refresh);
+    app.settle().await;
+
+    assert!(!app.app.focus_active());
+    assert_eq!(app.cached("playlist:PL1"), None);
+    assert!(!app.app.home.pages().any(|page| page.title == "Late night"));
+    assert!(!app.app.library.pages().any(|page| page.title == "Late night"));
 }
