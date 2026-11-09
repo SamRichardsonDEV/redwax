@@ -227,17 +227,20 @@ impl PlayingApp {
             "a natural full play, fake save, and playlist refresh",
             |harness| {
                 harness.source.called("add_to_playlist:PL1:focus-natural")
-                    && harness
-                        .app
-                        .home
-                        .top()
-                        .is_some_and(|page| page.tracks().any(|track| track.video_id == "focus-natural"))
+                    && harness.app.home.top().is_some_and(|page| {
+                        page.tracks()
+                            .any(|track| track.video_id == "focus-natural" && track.playlist_entry.is_some())
+                    })
                     && harness
                         .app
                         .deps
                         .page_cache
                         .get("playlist:PL1")
-                        .is_some_and(|page| page.tracks().any(|track| track.video_id == "focus-natural"))
+                        .is_some_and(|page| {
+                            page.tracks().any(|track| {
+                                track.video_id == "focus-natural" && track.playlist_entry.is_some()
+                            })
+                        })
             },
         )
         .await?;

@@ -125,6 +125,10 @@ Inside redwax, press `tab` to focus the account box at the top right, then
 press `enter` to switch. Press `escape` to cancel. Playback continues while
 you switch accounts.
 
+The account box also shows login health. Background checks run every minute.
+**Login unconfirmed** warns of a failed check. **Login expired: Sign in**
+stays visible when browser recovery fails, even after you dismiss the picker.
+
 `redwax login` follows the account selected in your browser. Changing account
 on the website alone does not switch a running redwax. Account listing leaves
 your saved login unchanged. `--account` selects an identity explicitly.

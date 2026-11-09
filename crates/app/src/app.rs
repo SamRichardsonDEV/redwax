@@ -394,6 +394,10 @@ pub enum AppEvent {
     SessionExpired {
         generation: u64,
     },
+    SessionRejected {
+        generation: u64,
+    },
+    CheckSession,
     LyricsReady {
         request: RequestId,
         track: Track,
@@ -441,6 +445,11 @@ pub enum AppEvent {
     PlaylistCreated {
         generation: u64,
         playlist: Playlist,
+    },
+    PlaylistTracksAdded {
+        generation: u64,
+        playlist: Playlist,
+        tracks: Vec<Track>,
     },
     PlayerChanged(PlayerState),
     FocusSaved {
@@ -515,10 +524,15 @@ enum Click {
     PlayNext,
 }
 
+#[derive(Clone)]
+struct PlaylistRefresh {
+    playlist: Playlist,
+    saved_tracks: Vec<Track>,
+}
+
 /// What `P` is adding, once the picker knows which playlist takes it.
 enum Addition {
-    /// One track, by video id.
-    Track(String),
+    Track(Track),
     /// Every track of an album or a playlist, fetched when the choice is made.
     Whole(Browsable),
 }
@@ -545,8 +559,8 @@ impl Subject {
     /// never offered as a second choice when it is the track that plays.
     fn same_track(&self, alternate_subject: &Subject) -> bool {
         match (&self.edit, &alternate_subject.edit) {
-            (Edit::Add(Addition::Track(first_video_id)), Edit::Add(Addition::Track(second_video_id))) => {
-                first_video_id == second_video_id
+            (Edit::Add(Addition::Track(first)), Edit::Add(Addition::Track(second))) => {
+                first.video_id == second.video_id
             }
             (Edit::Remove(first_track), Edit::Remove(second_track)) => {
                 first_track.video_id == second_track.video_id
@@ -683,23 +697,35 @@ pub struct ArtBox {
     pub accent_color: Option<Color>,
 }
 
-#[derive(Clone, Copy)]
+const SESSION_CHECK_INTERVAL: Duration = Duration::from_secs(60);
+const SESSION_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum LoginState {
     Checking,
+    Refreshing,
     SignedIn,
     Unconfirmed,
+    Expired,
     SignedOut,
 }
 
 impl LoginState {
-    fn label(self, identity: &str) -> &str {
+    fn label(self, identity: &str) -> String {
         match self {
-            Self::Checking => "Checking login",
-            Self::SignedIn if !identity.is_empty() => identity,
-            Self::SignedIn => "Signed in",
-            Self::Unconfirmed => "Login unconfirmed",
-            Self::SignedOut => "Sign in",
+            Self::Checking => "Checking login".to_owned(),
+            Self::Refreshing => "Refreshing login".to_owned(),
+            Self::SignedIn if !identity.is_empty() => identity.to_owned(),
+            Self::SignedIn => "Signed in".to_owned(),
+            Self::Unconfirmed if !identity.is_empty() => format!("Login unconfirmed: {identity}"),
+            Self::Unconfirmed => "Login unconfirmed".to_owned(),
+            Self::Expired => "Login expired: Sign in".to_owned(),
+            Self::SignedOut => "Sign in".to_owned(),
         }
+    }
+
+    fn needs_attention(self) -> bool {
+        matches!(self, Self::Refreshing | Self::Unconfirmed | Self::Expired)
     }
 }
 
@@ -767,7 +793,7 @@ pub struct App<S: MusicSource, P: PlayerControl> {
     /// What each browser last asked for, so a refused fetch can be reissued.
     page_requests: HashMap<Target, RequestSlot<PageFetch>>,
     prefetch_requests: HashMap<String, RequestSlot<()>>,
-    playlist_refreshes: HashMap<String, RequestSlot<Playlist>>,
+    playlist_refreshes: HashMap<String, RequestSlot<PlaylistRefresh>>,
     /// The partial page each browser is still filling in.
     page_loaders: HashMap<Target, Loader>,
     /// Lengths remembered from earlier visits, shared with the fill tasks.
@@ -1101,6 +1127,15 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         self.start_mpris();
         self.load_page(Target::Home, Some("home".to_string()), false);
         self.start_account();
+        let events = self.events.clone();
+        self.background_tasks.spawn(async move {
+            loop {
+                tokio::time::sleep(SESSION_CHECK_INTERVAL).await;
+                if events.send(AppEvent::CheckSession).is_err() {
+                    break;
+                }
+            }
+        });
         let selected_theme = self.theme_controller.selected().clone();
         if let Some(live_theme_request) = self.theme_controller.activate(selected_theme) {
             self.start_palette_poll(live_theme_request);
@@ -1141,6 +1176,11 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let Some(refresh_session) = self.deps.session_refresh.clone() else {
             return false;
         };
+        if !matches!(retry, Some(Retry::Account(_))) {
+            self.account_request.cancel();
+        }
+        self.login_state = LoginState::Refreshing;
+        self.screen.touch();
         let retry = retry.or_else(|| {
             Some(Retry::Session(
                 self.deps.session_generation.load(Ordering::SeqCst),
@@ -1249,13 +1289,27 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let source = self.source.clone();
         let event_sender = self.events.clone();
         let request_task = self.background_tasks.spawn(async move {
-            let account_result = source.whoami().await;
+            let account_result = tokio::time::timeout(SESSION_CHECK_TIMEOUT, source.whoami())
+                .await
+                .unwrap_or_else(|_| Err(redwax_ytm::Error::Network("Login check timed out".to_owned())));
             let _ = event_sender.send(AppEvent::AccountReady {
                 request: request_id,
                 result: account_result,
             });
         });
         self.account_request.hold(request_id, request_task);
+    }
+
+    fn check_session(&mut self) {
+        if self.session_logged_out
+            || !self.source.signed_in()
+            || self.account_request.is_pending()
+            || self.account_change_request.is_pending()
+            || self.login_state == LoginState::Refreshing
+        {
+            return;
+        }
+        self.start_account_request(false);
     }
 
     fn open_account_picker(&mut self) {
@@ -2036,37 +2090,76 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         };
         let source = self.source.clone();
         let events = self.events.clone();
+        let generation = self.deps.session_generation.load(Ordering::SeqCst);
         let task = self.background_tasks.spawn(async move {
             let result = crate::focus::append(source.as_ref(), &destination, &track).await;
+            if matches!(
+                &result,
+                Err(redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut)
+            ) {
+                let _ = events.send(AppEvent::SessionRejected { generation });
+            }
             let _ = events.send(AppEvent::FocusSaved {
                 request,
                 playlist: destination,
-                result,
+                result: result.map_err(|error| error.to_string()),
             });
         });
         self.focus_mode.hold(request, task);
     }
 
-    fn refresh_saved_playlist(&mut self, playlist: Playlist, saved_video_id: String) {
+    fn refresh_saved_playlist(&mut self, mut playlist: Playlist, tracks: Vec<Track>) {
+        playlist.playlist_id = playlist
+            .playlist_id
+            .strip_prefix("VL")
+            .unwrap_or(&playlist.playlist_id)
+            .to_string();
         let cache_key = format!("playlist:{}", playlist.playlist_id);
         if let Some(prefetch) = self.prefetch_requests.get_mut(&cache_key) {
             prefetch.cancel();
         }
-        self.deps.page_cache.remove(&cache_key);
         let slot = self
             .playlist_refreshes
             .entry(playlist.playlist_id.clone())
             .or_default();
-        let request = slot.begin(playlist.clone());
+        let mut saved_tracks = slot
+            .current()
+            .map(|(_, refresh)| refresh.saved_tracks.clone())
+            .unwrap_or_default();
+        for track in tracks {
+            if !saved_tracks.iter().any(|saved| saved.video_id == track.video_id) {
+                saved_tracks.push(track);
+            }
+        }
+        let request = slot.begin(PlaylistRefresh {
+            playlist: playlist.clone(),
+            saved_tracks: saved_tracks.clone(),
+        });
+        for browser in [&mut self.home, &mut self.search, &mut self.library] {
+            browser.append_playlist_tracks(&playlist.playlist_id, &saved_tracks);
+        }
+        if let Some(mut cached) = self.deps.page_cache.get(&cache_key) {
+            crate::browser::append_playlist_tracks(&mut cached, &saved_tracks);
+            if let Ok(cached) = CompletePage::try_from(cached) {
+                self.deps.page_cache.put(&cache_key, &cached);
+            }
+        }
         let source = self.source.clone();
         let events = self.events.clone();
         let playlist_id = playlist.playlist_id.clone();
+        let generation = self.deps.session_generation.load(Ordering::SeqCst);
         let task = self.background_tasks.spawn(async move {
-            let result = crate::focus::refreshed_playlist(source.as_ref(), &playlist, &saved_video_id).await;
+            let result = refreshed_playlist(source.as_ref(), &playlist, &saved_tracks).await;
+            if matches!(
+                &result,
+                Err(redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut)
+            ) {
+                let _ = events.send(AppEvent::SessionRejected { generation });
+            }
             let _ = events.send(AppEvent::PlaylistRefreshed {
                 playlist_id,
                 request,
-                result,
+                result: result.map_err(|error| error.to_string()),
             });
         });
         slot.hold(request, task);
@@ -2081,15 +2174,14 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let Some(slot) = self.playlist_refreshes.get_mut(&playlist_id) else {
             return;
         };
-        let Some(playlist) = slot.complete(request).cloned() else {
+        let Some(refresh) = slot.complete(request).cloned() else {
             return;
         };
-        slot.cancel();
+        let playlist = refresh.playlist;
         let cache_key = format!("playlist:{playlist_id}");
         let page = match result {
             Ok(page) => page,
             Err(error) => {
-                self.deps.page_cache.remove(&cache_key);
                 if let Some(prefetch) = self.prefetch_requests.get_mut(&cache_key) {
                     prefetch.cancel();
                 }
@@ -2101,6 +2193,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 return;
             }
         };
+        slot.cancel();
         let mut page = page.into_page();
         self.duration_cache.fill(&mut page);
         let tracks: Vec<_> = page.tracks().cloned().collect();
@@ -2118,7 +2211,11 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     .unwrap_or(&playlist.playlist_id)
                     == playlist_id
             });
-            if reading_playlist && showing_playlist {
+            if reading_playlist && !showing_playlist {
+                if let Some((request, _)) = self.page_requests.get(&target).and_then(RequestSlot::current) {
+                    self.page_ready(target, request, page.clone());
+                }
+            } else if reading_playlist {
                 if self
                     .page_loaders
                     .get(&target)
@@ -3097,7 +3194,11 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         self.account_choices_request.cancel();
         self.account_change_request.cancel();
         self.account.clear();
-        self.login_state = LoginState::SignedOut;
+        self.login_state = if reauthenticate {
+            LoginState::Expired
+        } else {
+            LoginState::SignedOut
+        };
         self.close_overlay();
         let Some(logout_session) = self.deps.session_logout.clone() else {
             self.handle_event(AppEvent::SessionLoggedOut {
@@ -3497,7 +3598,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     }
 
     fn set_liked(&mut self, track: Track, liked: bool) {
-        if !self.source.signed_in() {
+        if !self.source.signed_in() || self.session_logged_out || self.login_state == LoginState::Refreshing {
             self.notify("Run `redwax login` to like tracks", None, Level::Warning);
             return;
         }
@@ -3511,12 +3612,18 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     fn send_like(&mut self, like_request: LikeRequest) {
         let source = self.source.clone();
         let event_sender = self.events.clone();
+        let generation = self.deps.session_generation.load(Ordering::SeqCst);
         self.background_tasks.spawn(async move {
             let like_error = source
                 .set_liked(&like_request.track, like_request.liked)
                 .await
                 .err()
-                .map(|error| error.to_string());
+                .map(|error| {
+                    if matches!(error, redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) {
+                        let _ = event_sender.send(AppEvent::SessionRejected { generation });
+                    }
+                    error.to_string()
+                });
             let _ = event_sender.send(AppEvent::LikeApplied {
                 request: like_request,
                 error: like_error,
@@ -3585,6 +3692,14 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
     }
 
     fn remove_highlighted_row(&mut self) {
+        if !self.source.signed_in() || self.session_logged_out || self.login_state == LoginState::Refreshing {
+            self.notify(
+                "Open the account menu to confirm your login",
+                Some("Account"),
+                Level::Warning,
+            );
+            return;
+        }
         let Some(browser_target) = self.tab.target() else {
             return;
         };
@@ -3617,6 +3732,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let playlist_id = playlist.playlist_id.clone();
         let track_description = track_label(&track);
         let playlist_title = playlist.title.clone();
+        let generation = self.deps.session_generation.load(Ordering::SeqCst);
         self.background_tasks.spawn(async move {
             let completion_event = match source
                 .remove_playlist_entry(&playlist_id, &track.video_id, &playlist_entry)
@@ -3634,11 +3750,16 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                         level: Level::Info,
                     }
                 }
-                Err(error) => AppEvent::PlaylistRemoveFailed {
-                    target: browser_target,
-                    removal: browser_removal,
-                    error: error.to_string(),
-                },
+                Err(error) => {
+                    if matches!(error, redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) {
+                        let _ = event_sender.send(AppEvent::SessionRejected { generation });
+                    }
+                    AppEvent::PlaylistRemoveFailed {
+                        target: browser_target,
+                        removal: browser_removal,
+                        error: error.to_string(),
+                    }
+                }
             };
             let _ = event_sender.send(completion_event);
         });
@@ -3650,6 +3771,10 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         video_id: &str,
         playlist_entry: Option<&PlaylistEntry>,
     ) {
+        let playlist_id = playlist_id.strip_prefix("VL").unwrap_or(playlist_id);
+        if let Some(refresh) = self.playlist_refreshes.get_mut(playlist_id) {
+            refresh.cancel();
+        }
         for browser in [&mut self.home, &mut self.search, &mut self.library] {
             browser.remove_playlist_track(playlist_id, video_id, playlist_entry);
         }
@@ -3675,14 +3800,14 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             .filter(|_| !highlighted_only)
             .map(|track| Subject {
                 label: track_label(track),
-                edit: Edit::Add(Addition::Track(track.video_id.clone())),
+                edit: Edit::Add(Addition::Track(track.clone())),
             });
         let highlighted_subject = self
             .active_browser()
             .and_then(Browser::selected_item)
             .and_then(|item| {
                 let (subject_label, addition) = match item {
-                    Item::Track(track) => (track_label(track), Addition::Track(track.video_id.clone())),
+                    Item::Track(track) => (track_label(track), Addition::Track(track.clone())),
                     selected_item => (
                         selected_item.title().to_string(),
                         Addition::Whole(selected_item.as_browsable()?),
@@ -3724,7 +3849,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         highlighted_subject: Option<Subject>,
         missing_subject_message: &'static str,
     ) {
-        if !self.source.signed_in() {
+        if !self.source.signed_in() || self.session_logged_out || self.login_state == LoginState::Refreshing {
             self.notify("Run `redwax login` to edit a playlist", None, Level::Warning);
             return;
         }
@@ -3862,21 +3987,56 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         } = picker.primary_subject;
         let source = self.source.clone();
         let event_sender = self.events.clone();
+        let generation = self.deps.session_generation.load(Ordering::SeqCst);
         self.background_tasks.spawn(async move {
             let (notification_text, notification_level) = match playlist_edit {
                 Edit::FocusDestination { .. } => return,
-                Edit::Add(addition) => add_tracks(source.as_ref(), &playlist, addition, &subject_label).await,
-                Edit::Remove(track) => {
-                    let removal_result =
-                        remove_track(source.as_ref(), &playlist, &track, &subject_label).await;
-                    if matches!(removal_result.1, Level::Info) {
-                        let _ = event_sender.send(AppEvent::PlaylistTrackRemoved {
-                            playlist_id: playlist.playlist_id.clone(),
-                            video_id: track.video_id,
-                            playlist_entry: None,
+                Edit::Add(addition) => match add_tracks(source.as_ref(), &playlist, addition).await {
+                    Ok((tracks, result)) => {
+                        let notification = match result {
+                            PlaylistAdd::Added => format!("{subject_label} added to {}", playlist.title),
+                            PlaylistAdd::AlreadyPresent => {
+                                format!("{subject_label} is already in {}", playlist.title)
+                            }
+                        };
+                        let _ = event_sender.send(AppEvent::PlaylistTracksAdded {
+                            generation,
+                            playlist,
+                            tracks,
                         });
+                        (notification, Level::Info)
                     }
-                    removal_result
+                    Err(error) => {
+                        if matches!(error, redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) {
+                            let _ = event_sender.send(AppEvent::SessionRejected { generation });
+                        }
+                        (error.to_string(), Level::Error)
+                    }
+                },
+                Edit::Remove(track) => {
+                    match source.remove_all_from_playlist(&playlist, &track.video_id).await {
+                        Ok(PlaylistRemoval::Removed { .. }) => {
+                            let _ = event_sender.send(AppEvent::PlaylistTrackRemoved {
+                                playlist_id: playlist.playlist_id.clone(),
+                                video_id: track.video_id,
+                                playlist_entry: None,
+                            });
+                            (
+                                format!("{subject_label} removed from {}", playlist.title),
+                                Level::Info,
+                            )
+                        }
+                        Ok(PlaylistRemoval::AlreadyAbsent) => (
+                            format!("{subject_label} is not in {}", playlist.title),
+                            Level::Warning,
+                        ),
+                        Err(error) => {
+                            if matches!(error, redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) {
+                                let _ = event_sender.send(AppEvent::SessionRejected { generation });
+                            }
+                            (error.to_string(), Level::Error)
+                        }
+                    }
                 }
             };
             let _ = event_sender.send(AppEvent::Notify {
@@ -3912,10 +4072,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
         let generation = self.deps.session_generation.load(Ordering::SeqCst);
         self.background_tasks.spawn(async move {
             let creation_result = match addition_ids(source.as_ref(), addition).await {
-                Ok(video_ids) => source
-                    .create_playlist(&playlist_name, &video_ids)
-                    .await
-                    .map_err(|error| error.to_string()),
+                Ok(video_ids) => source.create_playlist(&playlist_name, &video_ids).await,
                 Err(error) => Err(error),
             };
             let (notification_text, notification_level) = match creation_result {
@@ -3931,7 +4088,12 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     });
                     (format!("Made {playlist_name} with {subject_label}"), Level::Info)
                 }
-                Err(error) => (error, Level::Error),
+                Err(error) => {
+                    if matches!(error, redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) {
+                        let _ = event_sender.send(AppEvent::SessionRejected { generation });
+                    }
+                    (error.to_string(), Level::Error)
+                }
             };
             let _ = event_sender.send(AppEvent::Notify {
                 text: notification_text,
@@ -4255,6 +4417,16 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     self.start_logout(true);
                 }
             }
+            AppEvent::SessionRejected { generation } => {
+                if generation == self.deps.session_generation.load(Ordering::SeqCst)
+                    && !self.session_logged_out
+                    && self.login_state != LoginState::Refreshing
+                    && !self.refresh_session(None)
+                {
+                    self.start_logout(true);
+                }
+            }
+            AppEvent::CheckSession => self.check_session(),
             AppEvent::SessionLoggedOut {
                 error,
                 reauthenticate,
@@ -4272,7 +4444,11 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                     );
                 }
                 self.account.clear();
-                self.login_state = LoginState::SignedOut;
+                self.login_state = if reauthenticate {
+                    LoginState::Expired
+                } else {
+                    LoginState::SignedOut
+                };
                 self.session_logged_out = true;
                 self.home.replace(Page::new("Home", Vec::new()));
                 self.search.replace(Page::new("Search", Vec::new()));
@@ -4337,47 +4513,48 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 };
                 match account_result {
                     Ok(Some(identity)) if !identity.is_empty() => {
+                        if !self.account.is_empty() && self.account != identity {
+                            self.account_changed(identity);
+                            return;
+                        }
+                        let first_identity = self.account.is_empty();
                         self.account = identity;
                         self.login_state = LoginState::SignedIn;
-                        self.load_page(Target::Library, Some("library".to_string()), false);
+                        if first_identity {
+                            self.load_page(Target::Library, Some("library".to_string()), false);
+                        }
                     }
                     Ok(_)
                         if self.source.signed_in()
-                            && self.account.is_empty()
                             && !retry_attempted
                             && self.refresh_session(Some(Retry::Account(request_id))) =>
                     {
-                        self.login_state = LoginState::Checking;
+                        self.login_state = LoginState::Refreshing;
                     }
                     Ok(_) if self.source.signed_in() && retry_attempted => {
                         self.start_logout(true);
                     }
                     Ok(_) => {
                         self.login_state = if self.source.signed_in() {
-                            if self.account.is_empty() {
-                                LoginState::Unconfirmed
-                            } else {
-                                LoginState::SignedIn
-                            }
+                            LoginState::Unconfirmed
                         } else {
                             self.account.clear();
                             LoginState::SignedOut
                         };
                         self.load_page(Target::Library, Some("library".to_string()), false);
                     }
-                    Err(redwax_ytm::Error::Rejected) if !retry_attempted => {
-                        self.account.clear();
+                    Err(redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) if !retry_attempted => {
                         self.login_state = if self.refresh_session(Some(Retry::Account(request_id))) {
-                            LoginState::Checking
+                            LoginState::Refreshing
                         } else {
                             self.start_logout(true);
-                            LoginState::SignedOut
+                            LoginState::Expired
                         };
                     }
                     Err(error) => {
                         if matches!(error, redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut) {
                             self.start_logout(true);
-                        } else if self.account.is_empty() {
+                        } else {
                             self.login_state = LoginState::Unconfirmed;
                         }
                         self.notify(error.to_string(), Some("YouTube Music"), Level::Error);
@@ -4466,6 +4643,15 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 self.cache_page(Target::Library, "library".to_owned());
                 self.refresh_picker_playlists();
             }
+            AppEvent::PlaylistTracksAdded {
+                generation,
+                playlist,
+                tracks,
+            } => {
+                if generation == self.deps.session_generation.load(Ordering::SeqCst) {
+                    self.refresh_saved_playlist(playlist, tracks);
+                }
+            }
             AppEvent::SessionRefreshed { error, retry } => self.session_refreshed(error, retry),
             AppEvent::PlayerChanged(state) => self.player_changed(state),
             AppEvent::FocusSaved {
@@ -4476,7 +4662,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                 if let Some(track) = self.focus_mode.complete(request, &result) {
                     match result {
                         Ok(PlaylistAdd::Added) => {
-                            self.refresh_saved_playlist(playlist, track.video_id.clone());
+                            self.refresh_saved_playlist(playlist, vec![track.clone()]);
                             self.notify(
                                 format!("{} saved to your focus playlist", track.title),
                                 Some("Focus mode"),
@@ -4484,7 +4670,7 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
                             );
                         }
                         Ok(PlaylistAdd::AlreadyPresent) => {
-                            self.refresh_saved_playlist(playlist, track.video_id.clone());
+                            self.refresh_saved_playlist(playlist, vec![track.clone()]);
                         }
                         Err(error) => {
                             self.focus_mode.stop();
@@ -4749,6 +4935,16 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             self.created_playlists
                 .retain(|playlist| !contains_playlist(&page, playlist));
             self.merge_created_playlists(&mut page);
+        }
+        if let Some(refresh) = fetch_context
+            .cache_key
+            .as_deref()
+            .and_then(|key| key.strip_prefix("playlist:"))
+            .and_then(|id| self.playlist_refreshes.get(id.strip_prefix("VL").unwrap_or(id)))
+            .and_then(RequestSlot::current)
+            .map(|(_, refresh)| refresh)
+        {
+            crate::browser::append_playlist_tracks(&mut page, &refresh.saved_tracks);
         }
         self.duration_cache.fill(&mut page);
         let prefetch_tracks: Vec<Track> = page.tracks().take(PREFETCH_TRACKS).cloned().collect();
@@ -5338,7 +5534,8 @@ impl<S: MusicSource, P: PlayerControl> App<S, P> {
             ui::header::HeaderView {
                 mode: frame_layout.header_mode,
                 active_tab: self.tab,
-                account: self.login_state.label(&self.account),
+                account: &self.login_state.label(&self.account),
+                account_warning: self.login_state.needs_attention(),
                 account_focused: self.account_focused(),
                 radio_loading: page_is_loading,
                 icons: &icons,
@@ -5797,68 +5994,67 @@ fn contains_playlist(page: &Page, playlist: &Playlist) -> bool {
     })
 }
 
-/// Every video id an addition names, an album or playlist read to its end.
-async fn addition_ids<S: MusicSource>(source: &S, addition: Addition) -> Result<Vec<String>, String> {
+async fn addition_tracks<S: MusicSource>(source: &S, addition: Addition) -> redwax_ytm::Result<Vec<Track>> {
     let browsable = match addition {
-        Addition::Track(video_id) => return Ok(vec![video_id]),
+        Addition::Track(track) => return Ok(vec![track]),
         Addition::Whole(browsable) => browsable,
     };
-    let first_page = source
-        .browse(&browsable)
-        .await
-        .map_err(|error| error.to_string())?;
+    let first_page = source.browse(&browsable).await?;
     let complete_page = collect_page(source, first_page)
         .await
-        .map_err(|incomplete| incomplete.to_string())?;
-    Ok(complete_page
-        .as_page()
-        .tracks()
-        .map(|track| track.video_id.clone())
+        .map_err(playlist_read_error)?;
+    Ok(complete_page.as_page().tracks().cloned().collect())
+}
+
+async fn addition_ids<S: MusicSource>(source: &S, addition: Addition) -> redwax_ytm::Result<Vec<String>> {
+    Ok(addition_tracks(source, addition)
+        .await?
+        .into_iter()
+        .map(|track| track.video_id)
         .collect())
 }
 
-/// Add what `addition` names to `playlist`, and the toast that says how it went.
 async fn add_tracks<S: MusicSource>(
     source: &S,
     playlist: &Playlist,
     addition: Addition,
-    subject_label: &str,
-) -> (String, Level) {
-    let video_ids = match addition_ids(source, addition).await {
-        Ok(video_ids) => video_ids,
-        Err(error) => return (error, Level::Error),
-    };
-    match source.add_to_playlist(&playlist.playlist_id, &video_ids).await {
-        Ok(PlaylistAdd::Added) => (
-            format!("{subject_label} added to {}", playlist.title),
-            Level::Info,
-        ),
-        Ok(PlaylistAdd::AlreadyPresent) => (
-            format!("{subject_label} is already in {}", playlist.title),
-            Level::Info,
-        ),
-        Err(error) => (error.to_string(), Level::Error),
-    }
+) -> redwax_ytm::Result<(Vec<Track>, PlaylistAdd)> {
+    let tracks = addition_tracks(source, addition).await?;
+    let video_ids: Vec<_> = tracks.iter().map(|track| track.video_id.clone()).collect();
+    let result = source.add_to_playlist(&playlist.playlist_id, &video_ids).await?;
+    Ok((tracks, result))
 }
 
-/// Take every occurrence of `track` out of `playlist`, after the source has
-/// proved it observed the complete playlist.
-async fn remove_track<S: MusicSource>(
-    source: &S,
-    playlist: &Playlist,
-    track: &Track,
-    subject_label: &str,
-) -> (String, Level) {
-    match source.remove_all_from_playlist(playlist, &track.video_id).await {
-        Ok(PlaylistRemoval::Removed { .. }) => (
-            format!("{subject_label} removed from {}", playlist.title),
-            Level::Info,
-        ),
-        Ok(PlaylistRemoval::AlreadyAbsent) => (
-            format!("{subject_label} is not in {}", playlist.title),
-            Level::Warning,
-        ),
-        Err(error) => (error.to_string(), Level::Error),
+async fn refreshed_playlist(
+    source: &impl MusicSource,
+    destination: &Playlist,
+    saved_tracks: &[Track],
+) -> redwax_ytm::Result<CompletePage> {
+    for attempt in 0..3 {
+        let page = source.browse(&Browsable::Playlist(destination.clone())).await?;
+        let page = collect_page(source, page).await.map_err(playlist_read_error)?;
+        if saved_tracks.iter().all(|saved| {
+            page.as_page()
+                .tracks()
+                .any(|track| track.video_id == saved.video_id)
+        }) {
+            return Ok(page);
+        }
+        if attempt < 2 {
+            // A successful edit can precede its appearance in playlist reads.
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    }
+    Err(redwax_ytm::Error::Other(
+        "YouTube has not shown the saved songs in this playlist yet".to_string(),
+    ))
+}
+
+// Keep authentication failures typed without exposing failed request details.
+fn playlist_read_error(incomplete: redwax_ytm::IncompletePage) -> redwax_ytm::Error {
+    match &incomplete.error {
+        redwax_ytm::Error::Rejected | redwax_ytm::Error::SignedOut => incomplete.error,
+        _ => redwax_ytm::Error::Other(incomplete.to_string()),
     }
 }
 

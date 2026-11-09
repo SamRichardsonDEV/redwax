@@ -18,6 +18,7 @@ pub struct HeaderView<'a> {
     pub mode: HeaderMode,
     pub active_tab: Tab,
     pub account: &'a str,
+    pub account_warning: bool,
     pub account_focused: bool,
     pub radio_loading: bool,
     pub icons: &'a Icons,
@@ -38,7 +39,7 @@ pub fn header(buffer: &mut Buffer, area: Rect, view: HeaderView<'_>) -> Vec<(Rec
     let navigation_area = Rect::new(area.x, area.y, area.width - width, 1);
     let navigation_view = HeaderView { account: "", ..view };
     let mut hits = navigation_header(buffer, navigation_area, &navigation_view);
-    let style = if view.account_focused {
+    let mut style = if view.account_focused {
         Style::new()
             .fg(view.theme.accent)
             .bg(view.theme.panel)
@@ -46,6 +47,9 @@ pub fn header(buffer: &mut Buffer, area: Rect, view: HeaderView<'_>) -> Vec<(Rec
     } else {
         Style::new().fg(view.theme.dim).bg(view.theme.surface)
     };
+    if view.account_warning {
+        style = style.fg(view.theme.warning).add_modifier(Modifier::BOLD);
+    }
     fill(buffer, account_area, style.bg.unwrap_or(view.theme.surface));
     let text = format!("[ {} ]", clip(&label, width.saturating_sub(4) as usize));
     put(

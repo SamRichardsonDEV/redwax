@@ -1,4 +1,6 @@
-use redwax_ytm::{Browsable, Item, Page};
+use std::collections::HashSet;
+
+use redwax_ytm::{Browsable, Item, Page, Shelf, Track};
 
 use crate::ui;
 
@@ -9,6 +11,55 @@ struct Visit {
     page: Page,
     opened_from: Option<Browsable>,
     cache_key: Option<String>,
+}
+
+impl Visit {
+    fn is_playlist(&self, playlist_id: &str) -> bool {
+        let playlist_id = playlist_id.strip_prefix("VL").unwrap_or(playlist_id);
+        matches!(
+            &self.opened_from,
+            Some(Browsable::Playlist(playlist))
+                if playlist.playlist_id.strip_prefix("VL").unwrap_or(&playlist.playlist_id) == playlist_id
+        ) || self
+            .cache_key
+            .as_deref()
+            .and_then(|key| key.strip_prefix("playlist:"))
+            .is_some_and(|id| id.strip_prefix("VL").unwrap_or(id) == playlist_id)
+    }
+}
+
+/// Confirmed saves can be shown before the next read supplies their playlist entry identities.
+pub(crate) fn append_playlist_tracks(page: &mut Page, tracks: &[Track]) -> bool {
+    if page.more.is_some() {
+        return false;
+    }
+    let mut existing: HashSet<_> = page.tracks().map(|track| track.video_id.as_str()).collect();
+    let additions: Vec<_> = tracks
+        .iter()
+        .filter(|track| existing.insert(track.video_id.as_str()))
+        .map(|track| {
+            Item::Track(Track {
+                playlist_entry: None,
+                ..track.clone()
+            })
+        })
+        .collect();
+    if additions.is_empty() {
+        return false;
+    }
+    let shelf = match page
+        .shelves
+        .iter()
+        .position(|shelf| shelf.tracks().next().is_some())
+    {
+        Some(index) => &mut page.shelves[index],
+        None => {
+            page.shelves.push(Shelf::new("Tracks", Vec::new()));
+            page.shelves.last_mut().expect("the track shelf was added")
+        }
+    };
+    shelf.items.extend(additions);
+    true
 }
 
 /// An optimistic playlist removal that can be restored only into the exact
@@ -480,17 +531,7 @@ impl Browser {
         let mut any_content_changed = false;
         let mut visible_content_changed = false;
         for (index, visit) in self.visits.iter_mut().enumerate() {
-            let matches_origin = matches!(
-                &visit.opened_from,
-                Some(Browsable::Playlist(playlist))
-                    if playlist.playlist_id.strip_prefix("VL").unwrap_or(&playlist.playlist_id) == playlist_id
-            );
-            let matches_cache = visit
-                .cache_key
-                .as_deref()
-                .and_then(|key| key.strip_prefix("playlist:"))
-                .is_some_and(|id| id.strip_prefix("VL").unwrap_or(id) == playlist_id);
-            if !matches_origin && !matches_cache {
+            if !visit.is_playlist(playlist_id) {
                 continue;
             }
             // An authoritative read supersedes optimistic rollback even if its content is equal.
@@ -513,6 +554,20 @@ impl Browser {
             self.rows_changed();
         }
         any_content_changed
+    }
+
+    pub(crate) fn append_playlist_tracks(&mut self, playlist_id: &str, tracks: &[Track]) {
+        let visible_visit = self.visits.len().checked_sub(1);
+        let mut visible_changed = false;
+        for (index, visit) in self.visits.iter_mut().enumerate() {
+            if visit.is_playlist(playlist_id) && append_playlist_tracks(&mut visit.page, tracks) {
+                visit.content_revision = visit.content_revision.wrapping_add(1);
+                visible_changed |= Some(index) == visible_visit;
+            }
+        }
+        if visible_changed {
+            self.rows_changed();
+        }
     }
 
     /// Library updates must not replace a browsed album or playlist.

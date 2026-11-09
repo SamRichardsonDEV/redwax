@@ -3,7 +3,7 @@
 use std::collections::{HashSet, VecDeque};
 
 use redwax_player::PlayerState;
-use redwax_ytm::{Browsable, CompletePage, MusicSource, Playlist, PlaylistAdd, Track, collect_page};
+use redwax_ytm::{MusicSource, Playlist, PlaylistAdd, Track};
 use tokio::task::AbortHandle;
 
 use crate::request::{RequestId, RequestSlot};
@@ -102,46 +102,13 @@ pub(crate) async fn append(
     source: &impl MusicSource,
     destination: &Playlist,
     track: &Track,
-) -> Result<PlaylistAdd, String> {
-    if source
-        .playlist_contains(destination, &track.video_id)
-        .await
-        .map_err(|error| error.to_string())?
-    {
+) -> redwax_ytm::Result<PlaylistAdd> {
+    if source.playlist_contains(destination, &track.video_id).await? {
         return Ok(PlaylistAdd::AlreadyPresent);
     }
     source
         .add_to_playlist(&destination.playlist_id, std::slice::from_ref(&track.video_id))
         .await
-        .map_err(|error| error.to_string())
-}
-
-pub(crate) async fn refreshed_playlist(
-    source: &impl MusicSource,
-    destination: &Playlist,
-    saved_video_id: &str,
-) -> Result<CompletePage, String> {
-    for attempt in 0..3 {
-        let page = source
-            .browse(&Browsable::Playlist(destination.clone()))
-            .await
-            .map_err(|error| error.to_string())?;
-        let page = collect_page(source, page)
-            .await
-            .map_err(|incomplete| incomplete.error.to_string())?;
-        if page
-            .as_page()
-            .tracks()
-            .any(|track| track.video_id == saved_video_id)
-        {
-            return Ok(page);
-        }
-        if attempt < 2 {
-            // A successful edit can precede its appearance in playlist reads.
-            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-        }
-    }
-    Err("YouTube has not shown the saved song in this playlist yet".to_string())
 }
 
 #[cfg(test)]

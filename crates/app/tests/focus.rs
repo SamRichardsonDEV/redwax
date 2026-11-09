@@ -825,8 +825,14 @@ async fn a_failed_post_save_refresh_preserves_the_remote_save_and_keeps_focus_ac
             .iter()
             .any(|track| track.video_id == "new-focus-song")
     );
-    assert_eq!(app.app.home.top(), Some(&old_page));
-    assert_eq!(app.cached("playlist:PL1"), None);
+    let visible = app.app.home.top().unwrap();
+    assert_eq!(visible.tracks().count(), 2);
+    let confirmed = visible
+        .tracks()
+        .find(|track| track.video_id == "new-focus-song")
+        .unwrap();
+    assert_eq!(confirmed.playlist_entry, None);
+    assert_eq!(app.cached("playlist:PL1"), Some(visible.clone()));
     assert!(app.app.notifications.iter().any(|notice| {
         notice.level == Level::Warning && notice.text.contains("Song saved, but could not refresh")
     }));

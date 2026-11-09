@@ -1574,12 +1574,11 @@ async fn logout_forgets_created_playlists_and_rejects_a_late_creation() {
         .load_page(redwax::app::Target::Library, Some("library".to_owned()), true);
     app.settle().await;
     app.press_all(&["3", "P"]).await;
-    let picker = app.app.playlist_picker().expect("the picker is open");
+    assert!(app.app.playlist_picker().is_none());
     assert!(
-        picker
-            .playlists
-            .iter()
-            .all(|playlist| playlist.playlist_id != "PLnew" && playlist.playlist_id != "PLlate")
+        app.app.library.pages().flat_map(|page| &page.shelves).flat_map(|shelf| &shelf.items).all(
+            |item| !matches!(item, Item::Playlist(playlist) if playlist.playlist_id == "PLnew" || playlist.playlist_id == "PLlate")
+        )
     );
 }
 

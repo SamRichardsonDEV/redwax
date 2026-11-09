@@ -71,7 +71,7 @@ impl Remote {
             Some(name) if is_redwax_name(name) => name.to_string(),
             Some(_) => return Err("Choose a redwax MPRIS session with --player".to_string()),
             None => {
-                let mut names: Vec<String> = bus
+                let names: Vec<String> = bus
                     .list_names()
                     .await
                     .map_err(|error| error.to_string())?
@@ -79,17 +79,25 @@ impl Remote {
                     .filter(|name| is_redwax_name(name.as_str()))
                     .map(|name| name.to_string())
                     .collect();
-                names.sort();
-                match names.as_slice() {
-                    [name] => name.clone(),
-                    [] => return Ok(None),
-                    _ => {
-                        return Err(format!(
-                            "Several redwax sessions are running. Choose one with --player: {}",
-                            names.join(", ")
-                        ));
+                let mut playing = Vec::new();
+                if names.len() > 1 {
+                    for name in &names {
+                        let Ok(player) = uncached_proxy(&connection, name, PLAYER_INTERFACE).await else {
+                            continue;
+                        };
+                        if player
+                            .get_property::<String>("PlaybackStatus")
+                            .await
+                            .is_ok_and(|status| status == "Playing")
+                        {
+                            playing.push(name.clone());
+                        }
                     }
                 }
+                let Some(name) = select_name(&names, &playing)? else {
+                    return Ok(None);
+                };
+                name
             }
         };
         let bus_name = mpris_server::zbus::names::BusName::try_from(selected.as_str())
@@ -280,6 +288,21 @@ impl Remote {
     }
 }
 
+fn select_name(names: &[String], playing: &[String]) -> Result<Option<String>, String> {
+    match (names, playing) {
+        ([], _) => Ok(None),
+        ([name], _) | (_, [name]) => Ok(Some(name.clone())),
+        _ => {
+            let mut names = names.to_vec();
+            names.sort();
+            Err(format!(
+                "Several redwax sessions are running. Choose one with --player: {}",
+                names.join(", ")
+            ))
+        }
+    }
+}
+
 pub(crate) fn is_redwax_name(name: &str) -> bool {
     name == BUS_NAME || name.starts_with("org.mpris.MediaPlayer2.redwax.instance")
 }
@@ -331,4 +354,31 @@ fn decode_track(mut metadata: Properties) -> MiniTrack {
 
 fn seconds(microseconds: i64) -> f64 {
     microseconds.max(0) as f64 / 1e6
+}
+
+#[cfg(test)]
+mod tests {
+    use super::select_name;
+
+    #[test]
+    fn the_only_playing_session_wins_over_an_idle_legacy_mini() {
+        let idle = "org.mpris.MediaPlayer2.redwax".to_string();
+        let main = "org.mpris.MediaPlayer2.redwax.instance123".to_string();
+        assert_eq!(
+            select_name(&[idle, main.clone()], std::slice::from_ref(&main)),
+            Ok(Some(main))
+        );
+    }
+
+    #[test]
+    fn an_explicit_choice_is_required_without_one_playing_session() {
+        let names = vec![
+            "org.mpris.MediaPlayer2.redwax".to_string(),
+            "org.mpris.MediaPlayer2.redwax.instance123".to_string(),
+        ];
+        assert!(select_name(&names, &[]).unwrap_err().contains("--player"));
+        assert!(select_name(&names, &names).unwrap_err().contains("--player"));
+        assert_eq!(select_name(&names[..1], &[]), Ok(Some(names[0].clone())));
+        assert_eq!(select_name(&[], &[]), Ok(None));
+    }
 }

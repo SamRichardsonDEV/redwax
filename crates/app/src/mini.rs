@@ -814,6 +814,44 @@ mod tests {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
+    #[tokio::test]
+    async fn a_companion_waits_without_claiming_a_playback_session() {
+        let Ok(connection) = mpris_server::zbus::Connection::session().await else {
+            eprintln!("skipped: no session bus");
+            return;
+        };
+        let bus = mpris_server::zbus::fdo::DBusProxy::new(&connection)
+            .await
+            .unwrap();
+        let name = format!(
+            "org.mpris.MediaPlayer2.redwax.instance{}_companion_wait",
+            std::process::id()
+        );
+        let bus_name = mpris_server::zbus::names::BusName::try_from(name.as_str()).unwrap();
+        assert!(!bus.name_has_owner(bus_name.clone()).await.unwrap());
+        let (commands, command_receiver) = mpsc::channel(16);
+        let (updates, mut receiver) = mpsc::channel(2);
+        let task = tokio::spawn(remote_loop(Some(name.clone()), command_receiver, updates));
+        let update = tokio::time::timeout(Duration::from_secs(5), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(update, Update::Disconnected(_)));
+        assert!(!task.is_finished());
+        commands.send((u64::MAX, MiniAction::Next)).await.unwrap();
+        let retry = tokio::time::timeout(Duration::from_secs(5), receiver.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(matches!(retry, Update::Disconnected(_)));
+        assert!(!bus.name_has_owner(bus_name).await.unwrap());
+        drop(commands);
+        tokio::time::timeout(Duration::from_secs(5), task)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
     fn state() -> MiniState {
         MiniState {
             title: "Focus song".to_string(),
@@ -828,6 +866,30 @@ mod tests {
             }],
             ..MiniState::default()
         }
+    }
+
+    #[test]
+    fn fresh_remote_state_replaces_the_previous_track_and_playback_details() {
+        let mut view = MiniView::new(&Config::default());
+        view.replace_state(state());
+        let mut next = state();
+        next.title = "Next song".to_string();
+        next.artist = "Next artist".to_string();
+        next.position = 47.0;
+        next.volume = 65;
+        next.paused = true;
+        view.replace_state(next.clone());
+        assert_eq!(view.state.as_ref(), Some(&next));
+
+        let mut terminal = Terminal::new(TestBackend::new(100, 4)).unwrap();
+        terminal
+            .draw(|frame| view.draw(frame, &crate::theme::redwax_theme()))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let title: String = (0..100).map(|x| buffer[(x, 0)].symbol()).collect();
+        assert!(title.contains("Next song"));
+        assert!(title.contains("Next artist"));
+        assert!(!title.contains("Focus song"));
     }
 
     #[test]

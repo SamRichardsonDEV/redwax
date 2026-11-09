@@ -130,10 +130,16 @@ The account box at the top right shows the current identity. Press `tab`, then
 identity, then `enter` to switch. Escape closes the picker. You can also reach
 the account box with left or right at the ends of the tab bar.
 
-On startup, Checking login means YouTube has not confirmed the saved session yet.
-Login unconfirmed means that the identity check did not complete. A confirmed
-account name stays visible through temporary errors. Sign in appears after
-logout or a rejected session.
+On startup, **Checking login** means YouTube has not confirmed the saved session yet.
+redwax checks again every minute in the background, with a ten-second timeout.
+A failed network check shows **Login unconfirmed** beside the known identity.
+This warning does not mean that YouTube rejected the login.
+
+**Refreshing login** means that redwax is recovering a rejected session from
+your browser. If recovery fails, **Login expired: Sign in** stays visible
+after you close the account picker. Click the account box or press `tab`, then
+`enter`, to sign in again. An explicit logout shows **Sign in**.
+Playback continues while login health is checked or recovery runs.
 
 The picker reads the logins in your remembered browser profile. Sign in to
 YouTube Music in that browser, then choose Refresh browser logins if needed.
@@ -166,9 +172,10 @@ If none is running, it waits and attaches when a session starts.
 The separate mini player uses the desktop session bus (D-Bus) and needs the
 full app running in the same desktop session.
 
-If several redwax sessions are running, use `--player` with the full MPRIS bus
-name to choose one. If that session is unavailable, the mini player waits
-for it to start.
+If several redwax sessions are running, the mini player attaches to the only
+one that is playing. If several are playing or all are paused, use `--player`
+with the full MPRIS bus name to choose one. If that session is unavailable,
+the mini player waits for it to start.
 
 See [Mini player](#mini-player) for controls, layout and session behaviour.
 
@@ -410,7 +417,15 @@ endpoint does not answer for them.
 Saving a song already in the destination reports that it is already there.
 An album or playlist can contain songs already saved in the destination.
 If YouTube refuses that batch, redwax checks the destination and retries
-only the missing songs. Ordinary saves need no extra playlist lookup.
+only the missing songs. Ordinary saves send the edit directly.
+
+Once YouTube confirms a save, the added songs appear immediately in complete
+playlist views and cached copies. redwax refreshes the complete destination
+in the background to obtain current playlist entry identities. Your selection
+and browsing history stay in place. If that refresh fails, the confirmed
+songs stay visible and a warning explains that the refresh failed.
+An authentication failure warns in the account box and starts session recovery.
+The failed edit is not replayed automatically.
 
 The last row, `+ New playlist`, asks for a name. `enter` makes a private
 playlist holding what the picker was adding, and `escape` goes back to the
@@ -619,7 +634,9 @@ The separate `redwax mini` never starts its own playback session. You can
 start it in a sidebar before opening the full app. It attaches when the full app starts.
 If the session stops responding or closes, the mini player stays open and
 looks for a session again. With `--player`, it reconnects only to that bus name.
-If several sessions are available, it asks you to choose one with `--player`.
+If several sessions are available, it chooses the only playing session or
+asks you to choose one with `--player`. An attached mini player stays with
+its session when you pause it.
 Controls remain unavailable until fresh playback state arrives. Commands from
 the old connection are discarded.
 
