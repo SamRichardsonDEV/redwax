@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use crate::config::Config;
 use crate::icons::{Icons, icon_set};
 use crate::keys::Action;
-pub use crate::mini_remote::Remote;
+use crate::mini_remote::Remote;
 use crate::mini_remote::{MiniAction, MiniState, MiniTrack};
 use crate::theme::Theme;
 use crate::ui::anim::Motion;
@@ -37,8 +37,14 @@ const MIN_HEIGHT: u16 = PLAYER_BAR_HEIGHT;
 pub async fn run(
     terminal: &mut Terminal<CrosstermBackend<Stdout>>,
     config: &Config,
-    remote: Remote,
+    player: Option<String>,
 ) -> Result<(), String> {
+    if player
+        .as_deref()
+        .is_some_and(|name| !crate::mini_remote::is_redwax_name(name))
+    {
+        return Err("Choose a redwax MPRIS session with --player".to_string());
+    }
     let theme_controller = crate::themes::ThemeController::new(&config.theme);
     let theme = theme_controller.present(
         theme_controller.resolve_or_cached(config),
@@ -48,7 +54,7 @@ pub async fn run(
     let (commands, command_receiver) = mpsc::channel(16);
     let (update_sender, mut updates) = mpsc::channel(2);
     let mut tasks = tokio::task::JoinSet::new();
-    tasks.spawn(remote_loop(remote, command_receiver, update_sender));
+    tasks.spawn(remote_loop(player, command_receiver, update_sender));
     let mut terminal_events = EventStream::new();
     let mut view = MiniView::new(config);
     let mut command_generation = None;
@@ -100,12 +106,11 @@ enum Update {
 }
 
 async fn remote_loop(
-    remote: Remote,
+    player: Option<String>,
     mut commands: mpsc::Receiver<(u64, MiniAction)>,
     updates: mpsc::Sender<Update>,
 ) {
-    let name = remote.name().to_string();
-    let mut remote = Some(remote);
+    let mut remote: Option<Remote> = None;
     let mut generation = 0_u64;
     let mut reconnect_at = tokio::time::Instant::now();
     let mut ticker = tokio::time::interval(POLL_INTERVAL);
@@ -156,7 +161,7 @@ async fn remote_loop(
                     continue;
                 }
             }
-            let result = reconnect(&name).await;
+            let result = reconnect(player.as_deref()).await;
             while commands.try_recv().is_ok() {}
             match result {
                 Ok((connected, state)) => {
@@ -177,11 +182,11 @@ async fn remote_loop(
     }
 }
 
-async fn reconnect(name: &str) -> Result<(Remote, MiniState), String> {
+async fn reconnect(player: Option<&str>) -> Result<(Remote, MiniState), String> {
     tokio::time::timeout(CALL_TIMEOUT, async {
-        let remote = Remote::find(Some(name))
+        let remote = Remote::find(player)
             .await?
-            .ok_or_else(|| "The selected redwax session is not running".to_string())?;
+            .ok_or_else(|| "Waiting for a redwax session".to_string())?;
         let state = remote.state().await?;
         Ok::<_, String>((remote, state))
     })
@@ -574,7 +579,7 @@ impl MiniView {
             }
         } else {
             let message = if self.connection_error.is_some() {
-                "Reconnecting to redwax..."
+                "Waiting for redwax..."
             } else {
                 "Connecting to redwax..."
             };

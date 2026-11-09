@@ -162,12 +162,13 @@ redwax mini [--player BUS_NAME] [--config PATH]
 
 Opens a compact player in the current terminal. If one redwax session is
 running, the mini player controls that session and uses its account and queue.
-If none is running, it starts its own playback session with the normal config,
-login and saved queue.
+If none is running, it waits and attaches when a session starts.
+The separate mini player uses the desktop session bus (D-Bus) and needs the
+full app running in the same desktop session.
 
 If several redwax sessions are running, use `--player` with the full MPRIS bus
-name to choose one. An unavailable explicit session or a connection error
-stops the command without starting another player.
+name to choose one. If that session is unavailable, the mini player waits
+for it to start.
 
 See [Mini player](#mini-player) for controls, layout and session behaviour.
 
@@ -612,21 +613,20 @@ same thing.
 | launch state | playback session | closing the mini player |
 |---|---|---|
 | A redwax session is already running | Controls the existing session | Leaves that session playing |
-| No redwax session is running | Starts and owns a session | Saves the queue and stops playback |
+| No redwax session is running | Waits for a session to start | Leaves playback unchanged |
 
-An attached mini player follows the chosen session name for its whole run.
-If that session stops responding or restarts, the mini player stays open and
-reconnects to the same name. Controls remain unavailable until fresh playback
-state arrives. Commands from the old connection are discarded. The mini
-player does not start a replacement playback session during reconnection.
+The separate `redwax mini` never starts its own playback session. You can
+start it in a sidebar before opening the full app. It attaches when the full app starts.
+If the session stops responding or closes, the mini player stays open and
+looks for a session again. With `--player`, it reconnects only to that bus name.
+If several sessions are available, it asks you to choose one with `--player`.
+Controls remain unavailable until fresh playback state arrives. Commands from
+the old connection are discarded.
 
-A mini player that starts its own session restores the saved queue paused.
-Press `space` to resume it.
-
-When the mini player owns its session, press `F` (Shift+F) to open the full app
-in the same terminal. This lets you browse music and choose a queue. Use
-Settings to return to mini. Resize or zoom a small pane before using the full
-view. An attached mini player does not offer this shortcut.
+When you switch the full app to its compact view through Settings, press `F`
+(Shift+F) to return to the full app in the same terminal. Resize or zoom a small
+pane before using the full view. A separate `redwax mini` does not offer this
+shortcut.
 
 Click the controls or use these keys:
 
@@ -646,7 +646,7 @@ Click the controls or use these keys:
 | `enter` | play the selected queue entry |
 | `escape` | hide the queue, or close the mini player |
 | `Q` | close the mini player |
-| `F` (Shift+F), when the mini player owns its session | open the full app |
+| `F` (Shift+F), in the full app compact view | return to the full app |
 
 ## Animation
 

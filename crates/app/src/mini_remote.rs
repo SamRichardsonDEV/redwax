@@ -117,10 +117,6 @@ impl Remote {
         Ok(Some(remote))
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
     async fn require_owner(&self) -> Result<(), String> {
         let bus = fdo::DBusProxy::new(self.player.connection())
             .await
@@ -284,7 +280,7 @@ impl Remote {
     }
 }
 
-fn is_redwax_name(name: &str) -> bool {
+pub(crate) fn is_redwax_name(name: &str) -> bool {
     name == BUS_NAME || name.starts_with("org.mpris.MediaPlayer2.redwax.instance")
 }
 

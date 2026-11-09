@@ -2,6 +2,8 @@
 
 A terminal YouTube Music player in Rust, with browser login, playlists,
 search, a queue, album art, synced lyrics and an eighteen-band equaliser.
+Focus mode collects fully played songs into a playlist. A mini player gives
+you compact playback controls in a terminal pane.
 Playback uses mpv. Premium accounts can request higher-quality audio when
 YouTube makes it available.
 
@@ -183,15 +185,29 @@ Press `6` to preview and choose themes. redwax includes ten themes, can read
 custom palettes, and can follow Ghostty, foot or Omarchy colours.
 See [themes](docs/themes.md) for custom files and dotfile links.
 
+## Focus mode
+
+Press `7` to open Settings. Under **Focus mode**, choose a playlist you own
+in the **Playlist** row, then turn **Focus mode** on. Songs that finish
+without skips or seeks are added once if absent from the destination.
+Pausing does not disqualify a song. A red **FOCUS ON** label shows when
+collection is active in the full app and mini player.
+
+The destination is remembered, but Focus mode starts off on each launch.
+Use repeat off or repeat queue. Repeat track stops collection.
+See [Focus mode](docs/usage.md#focus-mode) for qualification rules and save status.
+
 ## Mini player
 
 Run `redwax mini` in a terminal or split pane. It controls a running redwax
-session, or starts its own playback session when none is running.
+session and waits for one to start when none is running.
 The compact view uses the same player bar, icons and colours as the full app.
+Closing this separate mini player leaves the full app playing.
 
 Use your terminal or multiplexer to choose its size and position.
 No particular terminal or multiplexer is required. In the full app, press `7`
-and choose **Mini player** to switch the current view to mini.
+and choose **Mini player** to switch the current view to mini. Press `F`
+(Shift+F) to return to the full app in the same terminal.
 See [Mini player](docs/usage.md#mini-player) for controls and session behaviour.
 
 ## Troubleshooting

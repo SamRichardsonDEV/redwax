@@ -487,7 +487,7 @@ fn main() -> ExitCode {
         Command::Run { config } => config,
     };
 
-    terminal_main(run(config_path, false, None))
+    terminal_main(run(config_path))
 }
 
 fn terminal_main(
@@ -530,58 +530,8 @@ fn terminal_main(
 
 async fn run_mini(config_path: Option<PathBuf>, player: Option<String>) -> Result<(), String> {
     let config = Config::load(config_path.as_deref())?;
-    if let Some(remote) = find_mini_session(player.as_deref()).await? {
-        return run_companion(&config, remote).await;
-    }
-    let startup_lock = mini_startup_lock().await?;
-    if let Some(remote) = find_mini_session(None).await? {
-        drop(startup_lock);
-        return run_companion(&config, remote).await;
-    }
-    run(config_path, true, Some(startup_lock)).await
-}
-
-async fn find_mini_session(player: Option<&str>) -> Result<Option<redwax::mini::Remote>, String> {
-    tokio::time::timeout(Duration::from_secs(5), redwax::mini::Remote::find(player))
-        .await
-        .map_err(|_| "Finding the redwax session timed out".to_string())?
-}
-
-async fn run_companion(config: &Config, remote: redwax::mini::Remote) -> Result<(), String> {
     let (mut terminal_screen, _terminal_guard) = enter_terminal().map_err(|error| error.to_string())?;
-    redwax::mini::run(&mut terminal_screen, config, remote).await
-}
-
-async fn mini_startup_lock() -> Result<std::fs::File, String> {
-    let directory = config::cache_dir();
-    std::fs::DirBuilder::new()
-        .recursive(true)
-        .mode(0o700)
-        .create(&directory)
-        .map_err(|error| format!("Could not prepare the mini player cache: {error}"))?;
-    let lock = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .mode(0o600)
-        .open(directory.join("mini-startup.lock"))
-        .map_err(|error| format!("Could not open the mini player startup lock: {error}"))?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    loop {
-        match lock.try_lock() {
-            Ok(()) => return Ok(lock),
-            Err(std::fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-            Err(std::fs::TryLockError::WouldBlock) => {
-                return Err("Another mini player is still starting. Try again shortly.".to_string());
-            }
-            Err(std::fs::TryLockError::Error(error)) => {
-                return Err(format!("Could not coordinate mini player startup: {error}"));
-            }
-        }
-    }
+    redwax::mini::run(&mut terminal_screen, &config, player).await
 }
 
 /// A panic must never scribble on the alternate screen, and a panic in a
@@ -812,11 +762,7 @@ fn first_theme(config: &Config) -> theme::Theme {
     )
 }
 
-async fn run(
-    config_path: Option<PathBuf>,
-    start_mini: bool,
-    mut startup_lock: Option<std::fs::File>,
-) -> Result<(), String> {
+async fn run(config_path: Option<PathBuf>) -> Result<(), String> {
     let config = Config::load(config_path.as_deref())?;
     let mut initial_session = match Session::read(&config.auth_path) {
         Ok(session) => session,
@@ -943,9 +889,6 @@ async fn run(
         dependencies,
         app_event_sender,
     );
-    if start_mini {
-        app.show_mini();
-    }
     if let Some(warning) = state_warning {
         app.notify(warning, Some("Saved playback"), Level::Warning);
     }
@@ -995,7 +938,6 @@ async fn run(
         }
         app.deps.art_setup = art_setup;
         app.start_background();
-        let service_deadline = Instant::now() + Duration::from_secs(10);
         if let Some(resolver) = resolver.clone() {
             start_sync_loop(&mut runtime_tasks, &app.deps.config, music_source.clone(), resolver, app.events.clone());
         }
@@ -1102,14 +1044,6 @@ async fn run(
             let event_drain_started = Instant::now();
             while let Ok(event) = app_events.try_recv() {
                 app.handle_event(event);
-            }
-            if startup_lock.is_some() {
-                let service_ready = app.mpris.lock().ok().is_some_and(|mpris| mpris.is_some());
-                if service_ready {
-                    startup_lock = None;
-                } else if Instant::now() >= service_deadline {
-                    return Err("The mini player could not publish its playback session".to_string());
-                }
             }
             if let Some(sink) = &app_timing_sink
                 && event_drain_started.elapsed() >= Duration::from_millis(20)
