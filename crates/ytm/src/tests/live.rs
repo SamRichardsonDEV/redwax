@@ -279,41 +279,34 @@ async fn live_a_track_is_added_to_a_playlist_and_taken_out_again() {
     let playlist_id = scratch_playlist(&client).await;
     let video_id = "1-Fxb9jsOuI".to_string();
 
-    let added = client
-        .add_to_playlist(&playlist_id, std::slice::from_ref(&video_id))
-        .await;
-    if added.is_err() {
-        delete_playlist(&client, &playlist_id).await;
-    }
-    added.expect("the add was accepted");
-
-    let opened = Browsable::Playlist(Playlist {
+    let playlist = Playlist {
         playlist_id: playlist_id.clone(),
         title: String::new(),
         subtitle: None,
         thumbnail_url: None,
-    });
-    let page = client.browse(&opened).await.expect("the playlist reads back");
-    let row = page.tracks().find(|track| track.video_id == video_id).cloned();
-    let Some(row) = row else {
-        delete_playlist(&client, &playlist_id).await;
-        panic!("the track was not in the playlist after the add");
     };
-    let entry = row
-        .playlist_entry
-        .clone()
-        .expect("an owned playlist row carries edit authority");
-
-    let removed = client
-        .remove_playlist_entry(&playlist_id, &video_id, &entry)
-        .await;
-    let after = client.browse(&opened).await.map(|page| page.tracks().count());
+    let result = async {
+        client
+            .add_to_playlist(&playlist_id, std::slice::from_ref(&video_id))
+            .await?;
+        let page = client.browse(&Browsable::Playlist(playlist.clone())).await?;
+        let row = page
+            .tracks()
+            .find(|track| track.video_id == video_id)
+            .ok_or_else(|| crate::Error::Other("the added track did not read back".to_string()))?;
+        let entry = row
+            .playlist_entry
+            .as_ref()
+            .ok_or_else(|| crate::Error::Other("the owned playlist row has no edit authority".to_string()))?;
+        client
+            .remove_playlist_entry(&playlist_id, &video_id, entry)
+            .await?;
+        client.playlist_contains(&playlist, &video_id).await
+    }
+    .await;
     delete_playlist(&client, &playlist_id).await;
-
-    removed.expect("the removal was accepted");
-    assert_eq!(
-        after.expect("the playlist reads back"),
-        0,
+    assert!(
+        !result.expect("playlist add, read-back, and removal succeed"),
         "the row is still there"
     );
 }

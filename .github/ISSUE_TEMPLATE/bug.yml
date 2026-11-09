@@ -1,7 +1,16 @@
-name: Bug
-description: Something does not work
+name: Bug report
+description: Report an installation, sign-in or playback problem
+title: "[Bug]: "
 labels: [bug]
 body:
+  - type: checkboxes
+    id: existing
+    attributes:
+      label: Existing reports
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+
   - type: textarea
     id: what
     attributes:
@@ -15,9 +24,9 @@ body:
     attributes:
       label: Output of `redwax doctor`
       description: >
-        This names every path, version and check redwax knows about, and is
-        usually enough on its own. It scrubs stream addresses. Look it over
-        before pasting and remove anything you would rather not share.
+        Paste the diagnostic output. If installation failed before redwax
+        could run, paste the installer error instead. Review it first and
+        remove cookies, tokens, account identifiers and private paths.
       render: text
     validations:
       required: true

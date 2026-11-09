@@ -53,6 +53,7 @@ impl Drop for TerminalGuard {
 static PANIC_MESSAGE: Mutex<Option<String>> = Mutex::new(None);
 
 const HELP: &str = "usage: redwax [--config PATH] [--version]
+       redwax mini   [--player BUS_NAME] [--config PATH]
        redwax setup  [--config PATH]   what a fresh install still needs
        redwax login  [--browser NAME] [--profile NAME] [--account QUERY] [--list-accounts] [--config PATH]
        redwax logout [--config PATH]
@@ -482,9 +483,16 @@ fn main() -> ExitCode {
         Command::Sync { config, dry_run } => {
             return subcommand_main(move |runtime| sync_main(runtime, config, dry_run));
         }
+        Command::Mini { config, player } => return terminal_main(run_mini(config, player)),
         Command::Run { config } => config,
     };
 
+    terminal_main(run(config_path))
+}
+
+fn terminal_main(
+    run_app: impl std::future::Future<Output = Result<(), String>> + Send + 'static,
+) -> ExitCode {
     install_panic_hook();
     let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
         Ok(runtime) => runtime,
@@ -495,7 +503,7 @@ fn main() -> ExitCode {
     };
     // The whole run is a task so a panic inside it comes back as a join error,
     // which leaves the restore below as the only path that touches the screen.
-    let app_task_result = runtime.block_on(async { tokio::spawn(run(config_path)).await });
+    let app_task_result = runtime.block_on(async { tokio::spawn(run_app).await });
     restore_terminal();
     match app_task_result {
         Ok(Ok(())) => ExitCode::SUCCESS,
@@ -518,6 +526,12 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+async fn run_mini(config_path: Option<PathBuf>, player: Option<String>) -> Result<(), String> {
+    let config = Config::load(config_path.as_deref())?;
+    let (mut terminal_screen, _terminal_guard) = enter_terminal().map_err(|error| error.to_string())?;
+    redwax::mini::run(&mut terminal_screen, &config, player).await
 }
 
 /// A panic must never scribble on the alternate screen, and a panic in a

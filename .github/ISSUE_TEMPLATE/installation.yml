@@ -1,0 +1,27 @@
+name: Installation report
+description: Tell us which Linux setup you tried and what worked
+title: "[Install]: "
+body:
+  - type: markdown
+    attributes:
+      value: >
+        A short report helps us see which Linux setups work. If something
+        failed, use the Bug report form instead.
+
+  - type: input
+    id: environment
+    attributes:
+      label: Distribution and terminal
+      placeholder: Fedora 44 with Ghostty
+    validations:
+      required: true
+
+  - type: textarea
+    id: result
+    attributes:
+      label: What worked
+      description: >
+        Tell us what you tried, such as installation, sign-in or playing a
+        track. A sentence is enough. Include the redwax version if you know it.
+    validations:
+      required: true

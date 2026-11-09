@@ -9,7 +9,7 @@ use ratatui::widgets::Widget;
 use crate::app::{Level, Notification, clock};
 use crate::theme::Theme;
 use crate::ui::anim::{self, Motion};
-use crate::ui::{Hit, blank, clip, popup, put, span};
+use crate::ui::{Hit, clip, popup, put, span};
 
 const PREFERRED_WIDTH: u16 = 40;
 pub const MAX_TOASTS: usize = 3;
@@ -136,23 +136,12 @@ fn padded_bounds(area: Rect) -> Rect {
 }
 
 fn surface(buffer: &mut Buffer, panel: Rect, notification: &Notification, theme: &Theme) {
-    blank(buffer, panel, Style::new().bg(theme.panel));
-    if panel.width < 6 {
-        return;
-    }
     let severity_color = match notification.level {
         Level::Error => theme.error,
         Level::Warning => theme.warning,
         Level::Info => theme.accent,
     };
-    for row_y in panel.y..panel.bottom() {
-        put(
-            buffer,
-            panel,
-            row_y,
-            vec![span("\u{2588}", Style::new().fg(severity_color).bg(theme.panel))],
-        );
-    }
+    popup::frame(buffer, panel, theme.panel, severity_color);
 }
 
 fn footer(buffer: &mut Buffer, content_area: Rect, footer_text: &str, theme: &Theme) {

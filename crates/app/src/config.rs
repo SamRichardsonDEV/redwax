@@ -50,6 +50,8 @@ pub struct Config {
     /// them in its still form, for a slow terminal or a screen recording.
     pub animations: bool,
     pub search_vim_mode: bool,
+    pub focus_playlist_id: Option<String>,
+    pub focus_playlist_title: Option<String>,
     /// Rows the album art is allowed. Lower it to give the queue box more of
     /// the column, raise it for a bigger cover. Clamped 6 to 30.
     pub art_height: u16,
@@ -97,6 +99,8 @@ impl Default for Config {
             transparent: false,
             animations: true,
             search_vim_mode: true,
+            focus_playlist_id: None,
+            focus_playlist_title: None,
             art_height: 22,
             volume: 80,
             home_rows: 6,
@@ -130,6 +134,8 @@ struct RawConfig {
     transparent: Option<bool>,
     animations: Option<bool>,
     search_vim_mode: Option<bool>,
+    focus_playlist_id: Option<String>,
+    focus_playlist_title: Option<String>,
     art_height: Option<i64>,
     volume: Option<i64>,
     home_rows: Option<usize>,
@@ -209,6 +215,16 @@ impl Config {
         if let Some(search_vim_mode) = parsed_config.search_vim_mode {
             config.search_vim_mode = search_vim_mode;
         }
+        config.focus_playlist_id = parsed_config
+            .focus_playlist_id
+            .as_deref()
+            .and_then(focus_playlist_id);
+        if config.focus_playlist_id.is_some() {
+            config.focus_playlist_title = parsed_config
+                .focus_playlist_title
+                .map(|title| title.trim().to_string())
+                .filter(|title| !title.is_empty());
+        }
         if let Some(art_height) = parsed_config.art_height {
             config.art_height = art_height.clamp(6, 30) as u16;
         }
@@ -263,6 +279,22 @@ impl Config {
         Ok(())
     }
 
+    pub fn set_focus_playlist(&mut self, playlist: &redwax_ytm::Playlist) -> Result<(), String> {
+        let playlist_id = focus_playlist_id(&playlist.playlist_id)
+            .ok_or_else(|| "Choose a regular playlist for focus mode".to_string())?;
+        let playlist_title = match playlist.title.trim() {
+            "" => playlist_id.clone(),
+            title => title.to_string(),
+        };
+        let mut document = ConfigDocument::open(&self.source)?;
+        document.set("focus_playlist_id", Value::from(playlist_id.as_str()));
+        document.set("focus_playlist_title", Value::from(playlist_title.as_str()));
+        document.write()?;
+        self.focus_playlist_id = Some(playlist_id);
+        self.focus_playlist_title = Some(playlist_title);
+        Ok(())
+    }
+
     /// Persist a theme identity, then make it the live configured choice.
     pub fn set_theme_choice(&mut self, choice: &str) -> Result<(), String> {
         write_string(&self.source, "theme", choice)?;
@@ -284,6 +316,17 @@ impl Config {
             format!("{},{cookies}", self.ytdl_raw_options)
         }
     }
+}
+
+fn focus_playlist_id(value: &str) -> Option<String> {
+    let value = value.trim();
+    let value = value.strip_prefix("VL").unwrap_or(value);
+    (value.starts_with("PL")
+        && value.len() > 2
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')))
+    .then(|| value.to_string())
 }
 
 pub(crate) fn write_string(
@@ -474,6 +517,81 @@ mod tests {
             std::fs::read_to_string(&path).unwrap(),
             before.replacen("true", "false", 1)
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn focus_settings_preserve_existing_values_and_reload_together() {
+        let dir = std::env::temp_dir().join(format!("redwax-focus-write-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(
+            &path,
+            "# My choices\nvolume = 37\n\n[mpv]\nargs = [\"--quiet\"]\n",
+        )
+        .unwrap();
+        let mut config = Config::load(Some(&path)).unwrap();
+        assert_eq!(config.focus_playlist_id, None);
+        let playlist = redwax_ytm::Playlist {
+            playlist_id: "VLPLfocus".to_string(),
+            title: "Deep \"work\"".to_string(),
+            subtitle: None,
+            thumbnail_url: None,
+        };
+
+        config.set_focus_playlist(&playlist).unwrap();
+
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let reloaded = Config::load(Some(&path)).unwrap();
+        assert!(saved.contains("# My choices"));
+        assert!(saved.contains("[mpv]\nargs = [\"--quiet\"]"));
+        assert_eq!(reloaded.volume, 37);
+        assert_eq!(reloaded.focus_playlist_id.as_deref(), Some("PLfocus"));
+        assert_eq!(reloaded.focus_playlist_title.as_deref(), Some("Deep \"work\""));
+        assert_eq!(config, reloaded);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn failed_focus_playlist_writes_keep_both_live_values() {
+        let dir = std::env::temp_dir().join(format!("redwax-focus-error-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let blocked_parent = dir.join("not-a-directory");
+        std::fs::write(&blocked_parent, "occupied").unwrap();
+        let mut config = Config {
+            source: blocked_parent.join("config.toml"),
+            focus_playlist_id: Some("PLprevious".to_string()),
+            focus_playlist_title: Some("Previous".to_string()),
+            ..Config::default()
+        };
+        let playlist = redwax_ytm::Playlist {
+            playlist_id: "PLnew".to_string(),
+            title: "New".to_string(),
+            subtitle: None,
+            thumbnail_url: None,
+        };
+
+        assert!(config.set_focus_playlist(&playlist).is_err());
+        assert_eq!(config.focus_playlist_id.as_deref(), Some("PLprevious"));
+        assert_eq!(config.focus_playlist_title.as_deref(), Some("Previous"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn focus_playlist_config_rejects_collections_and_empty_ids() {
+        let dir = std::env::temp_dir().join(format!("redwax-focus-load-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        for playlist_id in ["", "PL", "LM", "RDEMmix", "PLbad/id"] {
+            std::fs::write(
+                &path,
+                format!("focus_playlist_id = {playlist_id:?}\nfocus_playlist_title = \"Unused\"\n"),
+            )
+            .unwrap();
+            let config = Config::load(Some(&path)).unwrap();
+            assert_eq!(config.focus_playlist_id, None);
+            assert_eq!(config.focus_playlist_title, None);
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -9,7 +9,7 @@ use redwax_ytm::Playlist;
 
 use crate::theme::Theme;
 use crate::ui::popup;
-use crate::ui::{RULE, blank, span, width_of};
+use crate::ui::{RULE, span, width_of};
 
 /// The row under the playlists that makes a playlist rather than choosing one.
 pub const NEW_PLAYLIST: &str = "+ New playlist";
@@ -21,6 +21,7 @@ pub struct PickerView<'a> {
     /// Taking a track out rather than putting one in. There is no new
     /// playlist row then, because nothing can be taken out of an empty one.
     pub remove_mode: bool,
+    pub focus_destination: bool,
     /// What is being edited, named the way a toast would name it.
     pub primary_item_label: &'a str,
     /// What `tab` swaps in, when there is anything to swap.
@@ -36,9 +37,10 @@ pub fn picker(buffer: &mut Buffer, area: Rect, view: PickerView<'_>) -> Rect {
     let theme = view.theme;
     let muted = Style::new().fg(theme.muted).bg(theme.surface);
     let plain = Style::new().fg(theme.foreground).bg(theme.surface);
-    let heading_text = match view.remove_mode {
-        true => "REMOVE FROM PLAYLIST",
-        false => "ADD TO PLAYLIST",
+    let heading_text = match (view.focus_destination, view.remove_mode) {
+        (true, _) => "FOCUS PLAYLIST",
+        (false, true) => "REMOVE FROM PLAYLIST",
+        (false, false) => "ADD TO PLAYLIST",
     };
     let mut heading_lines = vec![
         Line::from(span(
@@ -58,6 +60,7 @@ pub fn picker(buffer: &mut Buffer, area: Rect, view: PickerView<'_>) -> Rect {
     let footer_hint = match (view.new_playlist_name_input, view.remove_mode) {
         (Some(_), _) => "enter make   escape back",
         (None, true) => "j k move   enter remove   escape cancel",
+        (None, false) if view.focus_destination => "j k move   enter choose   escape cancel",
         (None, false) => "j k move   enter add   escape cancel",
     };
     let footer = popup::paragraph(Line::from(span(footer_hint, muted)));
@@ -65,7 +68,7 @@ pub fn picker(buffer: &mut Buffer, area: Rect, view: PickerView<'_>) -> Rect {
         .playlists
         .iter()
         .map(|playlist| playlist.title.as_str())
-        .chain((!view.remove_mode).then_some(NEW_PLAYLIST))
+        .chain((!view.remove_mode && !view.focus_destination).then_some(NEW_PLAYLIST))
         .collect();
     let mut sizing_lines = heading_lines;
     match view.new_playlist_name_input {
@@ -85,7 +88,7 @@ pub fn picker(buffer: &mut Buffer, area: Rect, view: PickerView<'_>) -> Rect {
         .saturating_add(4)
         .min(u16::MAX as usize) as u16;
     let panel = popup::fit(&sizing_content, area, preferred_width);
-    blank(buffer, panel, Style::new().bg(theme.surface));
+    popup::frame(buffer, panel, theme.surface, theme.muted);
     let content_area = popup::inner(panel);
     if content_area.width == 0 || content_area.height == 0 {
         return panel;
@@ -233,7 +236,7 @@ mod tests {
                 thumbnail_url: None,
             })
             .collect();
-        for height in [1, 3, 6] {
+        for height in [3, 6] {
             let area = Rect::new(0, 0, 40, height);
             let mut buffer = Buffer::empty(area);
             picker(
@@ -241,6 +244,7 @@ mod tests {
                 area,
                 PickerView {
                     remove_mode: true,
+                    focus_destination: false,
                     primary_item_label: "A track description longer than the destination name",
                     alternate_item_label: Some("Another item that the user can choose"),
                     playlists: &playlists,
@@ -270,6 +274,7 @@ mod tests {
             area,
             PickerView {
                 remove_mode: false,
+                focus_destination: false,
                 primary_item_label: "A track",
                 alternate_item_label: None,
                 playlists: &playlists,

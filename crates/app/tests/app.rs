@@ -1439,12 +1439,7 @@ async fn test_the_picker_makes_a_new_playlist() {
             .is_some_and(|picker| picker.new_playlist_name_input.is_some()),
         "enter on the last row did not ask for a name"
     );
-    let fetched = app
-        .source
-        .calls()
-        .iter()
-        .filter(|call| *call == "library")
-        .count();
+    let library_depth = app.app.library.depth();
 
     app.type_text("Road trip").await;
     app.press("enter").await;
@@ -1454,15 +1449,7 @@ async fn test_the_picker_makes_a_new_playlist() {
         "{:?}",
         app.source.calls()
     );
-    assert!(
-        app.source
-            .calls()
-            .iter()
-            .filter(|call| *call == "library")
-            .count()
-            > fetched,
-        "the library was not fetched again"
-    );
+    assert_eq!(app.app.library.depth(), library_depth);
     assert!(
         app.app
             .notifications
@@ -1470,6 +1457,128 @@ async fn test_the_picker_makes_a_new_playlist() {
             .any(|note| note.text.contains("Made Road trip")),
         "no toast: {:?}",
         app.app.notifications
+    );
+    assert!(
+        app.cached("library")
+            .expect("the library is cached")
+            .shelves
+            .iter()
+            .flat_map(|shelf| &shelf.items)
+            .any(|item| matches!(item, Item::Playlist(playlist) if playlist.playlist_id == "PLnew"))
+    );
+    app.playing_queue(tracks(), 1);
+    app.press("P").await;
+    assert!(app.screen().contains("Road trip"));
+    app.press("enter").await;
+    assert!(app.source.called("add_to_playlist:PLnew:v2"));
+}
+
+#[tokio::test]
+async fn a_created_playlist_survives_a_stale_library_refresh_while_browsing() {
+    let mut app = Harness::start("playlist-new-nested-refresh").await;
+    app.press_all(&["3", "enter", "j"]).await;
+    let page = app.app.library.top().cloned();
+    let cursor = app.app.library.cursor();
+    let depth = app.app.library.depth();
+    assert!(depth > 1);
+
+    app.press_all(&["ctrl+p", "G", "enter"]).await;
+    app.type_text("Road trip").await;
+    app.press("enter").await;
+    assert!(app.source.called("create_playlist:Road trip:v2"));
+    assert_eq!(app.app.library.top(), page.as_ref());
+    assert_eq!(app.app.library.cursor(), cursor);
+    assert_eq!(app.app.library.depth(), depth);
+
+    app.app
+        .load_page(redwax::app::Target::Library, Some("library".to_owned()), false);
+    assert_eq!(app.app.library.top(), page.as_ref());
+    assert_eq!(app.app.library.cursor(), cursor);
+    assert_eq!(app.app.library.depth(), depth);
+    app.settle().await;
+    assert_eq!(app.app.library.top(), page.as_ref());
+    assert_eq!(app.app.library.cursor(), cursor);
+    assert_eq!(app.app.library.depth(), depth);
+    assert_eq!(
+        app.app
+            .library
+            .open_playlist()
+            .map(|playlist| playlist.playlist_id.as_str()),
+        Some("PL1")
+    );
+
+    app.press("ctrl+p").await;
+    let picker = app.app.playlist_picker().expect("the picker is open");
+    assert_eq!(
+        picker
+            .playlists
+            .iter()
+            .filter(|playlist| playlist.playlist_id == "PLnew")
+            .count(),
+        1
+    );
+    app.press("enter").await;
+    assert!(app.source.called("add_to_playlist:PLnew:v2"));
+    app.press("escape").await;
+    assert!(app.screen().contains("Road trip"));
+}
+
+#[tokio::test]
+async fn a_failed_playlist_creation_does_not_add_a_destination() {
+    let mut setup = Setup::new("playlist-new-failed");
+    setup.failing_edits();
+    let mut app = setup.build();
+    app.app.start_background();
+    app.settle().await;
+    app.press_all(&["P", "G", "enter"]).await;
+    app.type_text("Road trip").await;
+    app.press("enter").await;
+    app.press("P").await;
+    assert!(
+        app.app
+            .playlist_picker()
+            .expect("the picker is open")
+            .playlists
+            .iter()
+            .all(|playlist| playlist.playlist_id != "PLnew")
+    );
+    assert!(!app.screen().contains("Road trip"));
+}
+
+#[tokio::test]
+async fn logout_forgets_created_playlists_and_rejects_a_late_creation() {
+    let mut app = Harness::start("playlist-new-account-scope").await;
+    app.press_all(&["P", "G", "enter"]).await;
+    app.type_text("Road trip").await;
+    app.press("enter").await;
+    let generation = app
+        .app
+        .deps
+        .session_generation
+        .load(std::sync::atomic::Ordering::SeqCst);
+    app.app.handle_event(AppEvent::SessionLoggedOut {
+        error: None,
+        reauthenticate: false,
+    });
+    app.app.handle_event(AppEvent::PlaylistCreated {
+        generation,
+        playlist: redwax_ytm::Playlist {
+            playlist_id: "PLlate".to_owned(),
+            title: "Old account playlist".to_owned(),
+            subtitle: None,
+            thumbnail_url: None,
+        },
+    });
+    assert!(app.cached("library").is_none());
+    app.app
+        .load_page(redwax::app::Target::Library, Some("library".to_owned()), true);
+    app.settle().await;
+    app.press_all(&["3", "P"]).await;
+    assert!(app.app.playlist_picker().is_none());
+    assert!(
+        app.app.library.pages().flat_map(|page| &page.shelves).flat_map(|shelf| &shelf.items).all(
+            |item| !matches!(item, Item::Playlist(playlist) if playlist.playlist_id == "PLnew" || playlist.playlist_id == "PLlate")
+        )
     );
 }
 

@@ -28,6 +28,10 @@ impl PageCache {
         let _ = crate::private_file::write(&self.cache_path(cache_key), page_json.as_bytes());
     }
 
+    pub fn remove(&self, cache_key: &str) {
+        let _ = std::fs::remove_file(self.cache_path(cache_key));
+    }
+
     /// A cached library belongs to the account that fetched it.
     pub fn clear(&self) -> std::io::Result<()> {
         let entries = match std::fs::read_dir(&self.cache_directory) {

@@ -1,17 +1,29 @@
 //! Popup measurement uses the renderer's wrapping rules so their geometry agrees.
 
 use crossterm::event::KeyCode;
+use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
+use ratatui::style::{Color, Style};
 use ratatui::text::Text;
-use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::widgets::{Block, BorderType, Paragraph, Widget, Wrap};
+
+use crate::ui::blank;
 
 pub(crate) fn paragraph<'a>(text: impl Into<Text<'a>>) -> Paragraph<'a> {
     Paragraph::new(text).wrap(Wrap { trim: false })
 }
 
+pub(crate) fn frame(buffer: &mut Buffer, panel: Rect, background: Color, border: Color) {
+    blank(buffer, panel, Style::new().bg(background));
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::new().fg(border).bg(background))
+        .render(panel, buffer);
+}
+
 pub(crate) fn inner(panel: Rect) -> Rect {
-    let horizontal_padding = if panel.width >= 6 { 2 } else { 0 };
-    let vertical_padding = u16::from(panel.height >= 3);
+    let horizontal_padding = if panel.width >= 6 { 2 } else { panel.width.min(1) };
+    let vertical_padding = panel.height.min(1);
     Rect::new(
         panel.x + horizontal_padding,
         panel.y + vertical_padding,
@@ -24,8 +36,8 @@ pub(crate) fn fit(paragraph: &Paragraph<'_>, bounds: Rect, preferred_width: u16)
     if bounds.is_empty() {
         return bounds;
     }
-    let horizontal_padding = if bounds.width >= 6 { 4 } else { 0 };
-    let vertical_padding = if bounds.height >= 3 { 2 } else { 0 };
+    let horizontal_padding = if bounds.width >= 6 { 4 } else { 2 };
+    let vertical_padding = 2;
     let mut panel_width = (paragraph.line_width().min(80) + horizontal_padding as usize)
         .max(preferred_width as usize)
         .min(bounds.width as usize) as u16;

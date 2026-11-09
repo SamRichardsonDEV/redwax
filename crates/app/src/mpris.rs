@@ -9,22 +9,25 @@
 //! `Server::new`) with the `tokio` feature, because its `Player` builder is
 //! `Rc` based and cannot live on the multi-threaded runtime.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 
 use mpris_server::zbus::{Connection, fdo};
 use mpris_server::{
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property, RootInterface, Server,
-    Signal, Time, TrackId, Uri, Volume,
+    Signal, Time, TrackId, TrackListInterface, TrackListProperty, TrackListSignal, Uri, Volume,
 };
-use redwax_player::{PlayerState, Repeat};
+use redwax_player::{PlayerState, QueueEntryId, Repeat};
 use redwax_ytm::Track;
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 use redwax_player::PlayerControl;
 
 pub const BUS_NAME: &str = "redwax";
 pub const IDENTITY: &str = "redwax";
+pub(crate) const FOCUS_METADATA_KEY: &str = "redwax:focus-active";
 
 /// A position that moves further than this between two updates is a seek, not
 /// playback, so clients are told to redraw their progress bar.
@@ -54,23 +57,34 @@ pub fn repeat_from(status: LoopStatus) -> Repeat {
     }
 }
 
-/// `mpris:trackid` `/org/redwax/track/<index>`, `mpris:length` in
-/// microseconds, `xesam:title`, `xesam:artist`, `xesam:album`,
-/// `mpris:artUrl`. Empty when nothing plays.
 pub fn metadata(player_state: &PlayerState) -> Metadata {
-    let Some(track) = player_state.track() else {
+    let Some(queue_index) = player_state.index else {
+        return Metadata::new();
+    };
+    queue_metadata(player_state, queue_index)
+}
+
+fn focus_metadata(player_state: &PlayerState, focus_active: bool) -> Metadata {
+    let mut metadata = metadata(player_state);
+    metadata.set(FOCUS_METADATA_KEY, Some(focus_active));
+    metadata
+}
+
+fn queue_metadata(player_state: &PlayerState, queue_index: usize) -> Metadata {
+    let Some(track) = player_state.queue.get(queue_index) else {
         return Metadata::new();
     };
     let mut metadata = Metadata::builder()
-        .trackid(track_id(player_state))
+        .trackid(queue_track_id(player_state, queue_index))
         .title(track.title.clone())
         .artist(artists(track))
         .url(track.url())
         .build();
     metadata.set_album(track.album.clone());
     metadata.set_art_url(track.thumbnail_url.clone());
-    let duration_seconds = player_state
-        .duration
+    let duration_seconds = (player_state.index == Some(queue_index))
+        .then_some(player_state.duration)
+        .flatten()
         .or_else(|| track.duration_seconds.map(f64::from))
         .filter(|seconds| *seconds > 0.0);
     metadata.set_length(duration_seconds.map(|seconds| Time::from_micros((seconds * 1e6) as i64)));
@@ -83,6 +97,10 @@ fn track_id(player_state: &PlayerState) -> TrackId {
     let Some(queue_index) = player_state.index else {
         return TrackId::NO_TRACK;
     };
+    queue_track_id(player_state, queue_index)
+}
+
+fn queue_track_id(player_state: &PlayerState, queue_index: usize) -> TrackId {
     let queue_entry_identity = player_state
         .queue_entries
         .get(queue_index)
@@ -102,6 +120,7 @@ fn artists(track: &Track) -> Vec<String> {
 pub struct Mpris {
     /// `Quit` cannot stop the app from here, so the app polls this instead.
     quit: Arc<AtomicBool>,
+    focus_active: watch::Sender<bool>,
     bus_name: String,
     /// Taken by `close` to release the bus name and stop the watcher.
     running: Mutex<Option<Running>>,
@@ -121,20 +140,23 @@ impl Mpris {
     pub async fn start<P: PlayerControl>(player: P) -> Result<Mpris, String> {
         let bus_name_suffix = free_bus_name().await?;
         let quit = Arc::new(AtomicBool::new(false));
+        let (focus_active, focus_updates) = watch::channel(false);
         let service = Service {
             player: player.clone(),
             quit: Arc::clone(&quit),
+            focus_active: focus_active.clone(),
         };
-        let server = Server::new(&bus_name_suffix, service)
+        let server = Server::new_with_track_list(&bus_name_suffix, service)
             .await
             .map_err(|error| format!("MPRIS name {bus_name_suffix} refused: {error}"))?;
         let bus_name = server.bus_name().to_string();
         let server = Arc::new(server);
         // The watcher holds a weak reference, so `close` frees the bus name
         // without waiting for the task to notice it was aborted.
-        let watcher = tokio::spawn(watch(Arc::downgrade(&server), player));
+        let watcher = tokio::spawn(watch(Arc::downgrade(&server), player, focus_updates));
         Ok(Mpris {
             quit,
+            focus_active,
             bus_name,
             running: Mutex::new(Some(Running {
                 watcher,
@@ -152,6 +174,14 @@ impl Mpris {
     /// True once a client has called `Quit`. The app polls it and exits.
     pub fn quit_requested(&self) -> bool {
         self.quit.load(Ordering::Relaxed)
+    }
+
+    pub fn set_focus_active(&self, active: bool) {
+        self.focus_active.send_if_modified(|previous| {
+            let changed = *previous != active;
+            *previous = active;
+            changed
+        });
     }
 
     pub fn close(&self) {
@@ -210,7 +240,9 @@ fn candidate_names(process_id: u32) -> impl Iterator<Item = String> {
 /// often as it did before.
 #[derive(PartialEq)]
 struct Emitted {
-    track: Option<String>,
+    focus_active: bool,
+    track: TrackId,
+    queue: Vec<QueueEntryId>,
     status: PlaybackStatus,
     repeat: Repeat,
     shuffle: bool,
@@ -220,9 +252,15 @@ struct Emitted {
 }
 
 impl Emitted {
-    fn of(player_state: &PlayerState) -> Emitted {
+    fn of(player_state: &PlayerState, focus_active: bool) -> Emitted {
         Emitted {
-            track: player_state.track().map(|track| track.video_id.clone()),
+            focus_active,
+            track: track_id(player_state),
+            queue: player_state
+                .queue_entries
+                .iter()
+                .map(|entry| entry.id())
+                .collect(),
             status: playback_status(player_state),
             repeat: player_state.repeat,
             shuffle: player_state.shuffle,
@@ -233,7 +271,11 @@ impl Emitted {
     }
 }
 
-async fn watch<P: PlayerControl>(server: Weak<Server<Service<P>>>, player: P) {
+async fn watch<P: PlayerControl>(
+    server: Weak<Server<Service<P>>>,
+    player: P,
+    mut focus_updates: watch::Receiver<bool>,
+) {
     let mut player_state_updates = player.state();
     let mut last_emitted_state: Option<Emitted> = None;
     let mut last_position_seconds = player_state_updates.borrow().position;
@@ -242,12 +284,30 @@ async fn watch<P: PlayerControl>(server: Weak<Server<Service<P>>>, player: P) {
             return;
         };
         let player_state = player_state_updates.borrow_and_update().clone();
-        let emitted_state = Emitted::of(&player_state);
+        let focus_active = *focus_updates.borrow_and_update();
+        let emitted_state = Emitted::of(&player_state, focus_active);
         let track_changed = last_emitted_state
             .as_ref()
             .is_none_or(|previously_emitted| previously_emitted.track != emitted_state.track);
         let position_jumped = (player_state.position - last_position_seconds).abs() > SEEK_JUMP_SECONDS;
         last_position_seconds = player_state.position;
+        if last_emitted_state
+            .as_ref()
+            .is_none_or(|previously_emitted| previously_emitted.queue != emitted_state.queue)
+        {
+            let tracks = (0..player_state.queue_entries.len())
+                .map(|index| queue_track_id(&player_state, index))
+                .collect();
+            let _ = server
+                .track_list_emit(TrackListSignal::TrackListReplaced {
+                    tracks,
+                    current_track: track_id(&player_state),
+                })
+                .await;
+            let _ = server
+                .track_list_properties_changed([TrackListProperty::Tracks])
+                .await;
+        }
         // A new track starts at zero, which is a jump but not a seek.
         if position_jumped && !track_changed {
             let seek_position = Time::from_micros((player_state.position * 1e6) as i64);
@@ -263,8 +323,11 @@ async fn watch<P: PlayerControl>(server: Weak<Server<Service<P>>>, player: P) {
                 || last_emitted_state
                     .as_ref()
                     .is_none_or(|previously_emitted| previously_emitted.duration != emitted_state.duration)
+                || last_emitted_state
+                    .as_ref()
+                    .is_none_or(|previously_emitted| previously_emitted.focus_active != focus_active)
             {
-                changed_properties.push(Property::Metadata(metadata(&player_state)));
+                changed_properties.push(Property::Metadata(focus_metadata(&player_state, focus_active)));
             }
             if last_emitted_state
                 .as_ref()
@@ -288,7 +351,11 @@ async fn watch<P: PlayerControl>(server: Weak<Server<Service<P>>>, player: P) {
             let _ = server.properties_changed(changed_properties).await;
         }
         drop(server);
-        if player_state_updates.changed().await.is_err() {
+        let changed = tokio::select! {
+            changed = player_state_updates.changed() => changed,
+            changed = focus_updates.changed() => changed,
+        };
+        if changed.is_err() {
             return;
         }
     }
@@ -305,6 +372,7 @@ fn volume_of(player_state: &PlayerState) -> Volume {
 struct Service<P: PlayerControl> {
     player: P,
     quit: Arc<AtomicBool>,
+    focus_active: watch::Sender<bool>,
 }
 
 /// `PlayerControl` promises `Send` futures and mpris-server's traits need
@@ -356,7 +424,7 @@ impl<P: PlayerControl> RootInterface for Service<P> {
     }
 
     async fn has_track_list(&self) -> fdo::Result<bool> {
-        Ok(false)
+        Ok(true)
     }
 
     async fn identity(&self) -> fdo::Result<String> {
@@ -460,7 +528,10 @@ impl<P: PlayerControl> PlayerInterface for Service<P> {
     }
 
     async fn metadata(&self) -> fdo::Result<Metadata> {
-        Ok(metadata(&self.player.snapshot()))
+        Ok(focus_metadata(
+            &self.player.snapshot(),
+            *self.focus_active.borrow(),
+        ))
     }
 
     async fn volume(&self) -> fdo::Result<Volume> {
@@ -469,8 +540,14 @@ impl<P: PlayerControl> PlayerInterface for Service<P> {
 
     async fn set_volume(&self, volume: Volume) -> mpris_server::zbus::Result<()> {
         let volume_percent = (volume.clamp(0.0, 1.0) * 100.0).round() as u8;
-        let _ = command!(self, "set the volume", |player| player.set_volume(volume_percent));
-        Ok(())
+        command!(self, "set the volume", |player| async move {
+            player.set_volume(volume_percent).await?;
+            if volume_percent > 0 && player.snapshot().muted {
+                player.toggle_mute().await?;
+            }
+            Ok::<(), redwax_player::Error>(())
+        })
+        .map_err(Into::into)
     }
 
     async fn position(&self) -> fdo::Result<Time> {
@@ -508,5 +585,94 @@ impl<P: PlayerControl> PlayerInterface for Service<P> {
 
     async fn can_control(&self) -> fdo::Result<bool> {
         Ok(true)
+    }
+}
+
+impl<P: PlayerControl> TrackListInterface for Service<P> {
+    async fn get_tracks_metadata(&self, track_ids: Vec<TrackId>) -> fdo::Result<Vec<Metadata>> {
+        let state = self.player.snapshot();
+        let positions: HashMap<TrackId, usize> = (0..state.queue_entries.len())
+            .map(|index| (queue_track_id(&state, index), index))
+            .collect();
+        Ok(track_ids
+            .into_iter()
+            .filter_map(|requested_id| {
+                positions
+                    .get(&requested_id)
+                    .map(|index| queue_metadata(&state, *index))
+            })
+            .collect())
+    }
+
+    async fn add_track(&self, _uri: Uri, _after_track: TrackId, _set_as_current: bool) -> fdo::Result<()> {
+        Err(fdo::Error::NotSupported("Edit the queue in redwax".to_string()))
+    }
+
+    async fn remove_track(&self, _track_id: TrackId) -> fdo::Result<()> {
+        Err(fdo::Error::NotSupported("Edit the queue in redwax".to_string()))
+    }
+
+    async fn go_to(&self, requested_id: TrackId) -> fdo::Result<()> {
+        let state = self.player.snapshot();
+        let Some(queue_index) =
+            (0..state.queue_entries.len()).find(|index| queue_track_id(&state, *index) == requested_id)
+        else {
+            return Ok(());
+        };
+        let entry_id = state.queue_entries[queue_index].id();
+        let revision = state.queue_revision;
+        command!(self, "play the selected queue entry", |player| async move {
+            player.jump_entry(entry_id, revision).await.map(|_| ())
+        })
+    }
+
+    async fn tracks(&self) -> fdo::Result<Vec<TrackId>> {
+        let state = self.player.snapshot();
+        Ok((0..state.queue_entries.len())
+            .map(|index| queue_track_id(&state, index))
+            .collect())
+    }
+
+    async fn can_edit_tracks(&self) -> fdo::Result<bool> {
+        Ok(false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn focus_metadata_is_available_while_idle_and_changes_without_playback() {
+        let state = PlayerState::default();
+        for active in [false, true] {
+            let metadata = focus_metadata(&state, active);
+            assert_eq!(
+                metadata.get_value(FOCUS_METADATA_KEY),
+                Some(&mpris_server::zbus::zvariant::Value::from(active))
+            );
+        }
+        assert!(Emitted::of(&state, false) != Emitted::of(&state, true));
+    }
+
+    #[test]
+    fn focus_metadata_keeps_the_playing_track_identity() {
+        let state = PlayerState {
+            queue: vec![redwax_player::bare_track("song", "Focus song")],
+            index: Some(0),
+            paused: true,
+            ..PlayerState::default()
+        };
+        let plain = metadata(&state);
+        let focused = focus_metadata(&state, true);
+        assert_eq!(
+            focused.get_value("mpris:trackid"),
+            plain.get_value("mpris:trackid")
+        );
+        assert_eq!(focused.get_value("xesam:title"), plain.get_value("xesam:title"));
+        assert_eq!(
+            focused.get_value(FOCUS_METADATA_KEY),
+            Some(&mpris_server::zbus::zvariant::Value::from(true))
+        );
     }
 }

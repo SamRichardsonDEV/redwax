@@ -72,6 +72,12 @@ impl<T> RequestSlot<T> {
             .map(|active_request| (active_request.request_id, &active_request.context))
     }
 
+    pub fn is_pending(&self) -> bool {
+        self.active_request
+            .as_ref()
+            .is_some_and(|active_request| !active_request.completed)
+    }
+
     pub fn complete(&mut self, request_id: RequestId) -> Option<&T> {
         let active_request = self
             .active_request

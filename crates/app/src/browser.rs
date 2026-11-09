@@ -1,4 +1,6 @@
-use redwax_ytm::{Browsable, Item, Page};
+use std::collections::HashSet;
+
+use redwax_ytm::{Browsable, Item, Page, Shelf, Track};
 
 use crate::ui;
 
@@ -9,6 +11,55 @@ struct Visit {
     page: Page,
     opened_from: Option<Browsable>,
     cache_key: Option<String>,
+}
+
+impl Visit {
+    fn is_playlist(&self, playlist_id: &str) -> bool {
+        let playlist_id = playlist_id.strip_prefix("VL").unwrap_or(playlist_id);
+        matches!(
+            &self.opened_from,
+            Some(Browsable::Playlist(playlist))
+                if playlist.playlist_id.strip_prefix("VL").unwrap_or(&playlist.playlist_id) == playlist_id
+        ) || self
+            .cache_key
+            .as_deref()
+            .and_then(|key| key.strip_prefix("playlist:"))
+            .is_some_and(|id| id.strip_prefix("VL").unwrap_or(id) == playlist_id)
+    }
+}
+
+/// Confirmed saves can be shown before the next read supplies their playlist entry identities.
+pub(crate) fn append_playlist_tracks(page: &mut Page, tracks: &[Track]) -> bool {
+    if page.more.is_some() {
+        return false;
+    }
+    let mut existing: HashSet<_> = page.tracks().map(|track| track.video_id.as_str()).collect();
+    let additions: Vec<_> = tracks
+        .iter()
+        .filter(|track| existing.insert(track.video_id.as_str()))
+        .map(|track| {
+            Item::Track(Track {
+                playlist_entry: None,
+                ..track.clone()
+            })
+        })
+        .collect();
+    if additions.is_empty() {
+        return false;
+    }
+    let shelf = match page
+        .shelves
+        .iter()
+        .position(|shelf| shelf.tracks().next().is_some())
+    {
+        Some(index) => &mut page.shelves[index],
+        None => {
+            page.shelves.push(Shelf::new("Tracks", Vec::new()));
+            page.shelves.last_mut().expect("the track shelf was added")
+        }
+    };
+    shelf.items.extend(additions);
+    true
 }
 
 /// An optimistic playlist removal that can be restored only into the exact
@@ -468,6 +519,74 @@ impl Browser {
         self.rows_changed();
     }
 
+    pub fn refresh_playlist(&mut self, playlist_id: &str, page: &Page) -> bool {
+        if page.more.is_some() {
+            return false;
+        }
+        let playlist_id = playlist_id.strip_prefix("VL").unwrap_or(playlist_id);
+        let selected_anchor = self
+            .selected()
+            .and_then(|selection| self.top().and_then(|page| FilterAnchor::capture(page, selection)));
+        let visible_visit = self.visits.len().checked_sub(1);
+        let mut any_content_changed = false;
+        let mut visible_content_changed = false;
+        for (index, visit) in self.visits.iter_mut().enumerate() {
+            if !visit.is_playlist(playlist_id) {
+                continue;
+            }
+            // An authoritative read supersedes optimistic rollback even if its content is equal.
+            visit.content_revision = visit.content_revision.wrapping_add(1);
+            if visit.page != *page {
+                visit.page = page.clone();
+                any_content_changed = true;
+                visible_content_changed |= Some(index) == visible_visit;
+            }
+        }
+        if visible_content_changed {
+            if let Some((shelf_index, item_index)) =
+                selected_anchor.and_then(|anchor| self.top().and_then(|page| anchor.resolve(page)))
+            {
+                self.selected_row_index = self
+                    .rows()
+                    .iter()
+                    .position(|row| *row == ui::Row::Item(shelf_index, item_index));
+            }
+            self.rows_changed();
+        }
+        any_content_changed
+    }
+
+    pub(crate) fn append_playlist_tracks(&mut self, playlist_id: &str, tracks: &[Track]) {
+        let visible_visit = self.visits.len().checked_sub(1);
+        let mut visible_changed = false;
+        for (index, visit) in self.visits.iter_mut().enumerate() {
+            if visit.is_playlist(playlist_id) && append_playlist_tracks(&mut visit.page, tracks) {
+                visit.content_revision = visit.content_revision.wrapping_add(1);
+                visible_changed |= Some(index) == visible_visit;
+            }
+        }
+        if visible_changed {
+            self.rows_changed();
+        }
+    }
+
+    /// Library updates must not replace a browsed album or playlist.
+    pub(crate) fn refresh_root(&mut self, page: Page, cache_key: Option<String>) {
+        let root_is_visible = self.visits.len() <= 1;
+        if let Some(root) = self.visits.first_mut() {
+            root.page = page;
+            root.cache_key = cache_key;
+            root.content_revision = root.content_revision.wrapping_add(1);
+        } else {
+            let mut root = self.new_visit(page, None);
+            root.cache_key = cache_key;
+            self.visits.push(root);
+        }
+        if root_is_visible {
+            self.rows_changed();
+        }
+    }
+
     pub fn to_depth(&mut self, visit_depth: usize) -> bool {
         if visit_depth + 1 >= self.visits.len() {
             return false;
@@ -841,6 +960,114 @@ mod tests {
 
         assert!(!browser.restore_removal(removal));
         assert_eq!(browser.top(), Some(&refreshed));
+    }
+
+    #[test]
+    fn a_playlist_refresh_preserves_the_active_selection_filter_scroll_and_history() {
+        let selected = track("wanted", "Selected song");
+        let (page, opened) = playlist_page(vec![
+            track("first", "First"),
+            selected.clone(),
+            track("third", "Third"),
+        ]);
+        let mut browser = Browser::default();
+        browser.show(Page::new("Library", Vec::new()));
+        browser.show_from(page.clone(), Some(opened));
+        browser.bind_cache_key(Some("playlist:PL-test".to_string()));
+        browser.set_filter(ItemKind::Tracks);
+        browser.select_row(Some(1));
+        browser.reconcile_viewport(1);
+        browser.set_busy(true);
+        let visit_id = browser.visits.last().unwrap().visit_id;
+        let revision = browser.revision();
+        let mut refreshed = page;
+        refreshed.shelves[0]
+            .items
+            .insert(0, track("earlier", "New earlier song"));
+        refreshed.shelves[0].items.push(track("saved", "New focus save"));
+
+        assert!(browser.refresh_playlist("VLPL-test", &refreshed));
+
+        assert_eq!(browser.selected_item(), Some(&selected));
+        assert_eq!(browser.cursor(), Some(2));
+        assert_eq!(browser.scroll(), 1);
+        assert_eq!(browser.filter(), ItemKind::Tracks);
+        assert_eq!(browser.depth(), 2);
+        assert!(browser.busy());
+        assert_eq!(browser.cache_key(), Some("playlist:PL-test"));
+        assert_eq!(browser.visits.last().unwrap().visit_id, visit_id);
+        assert_eq!(browser.revision(), revision.wrapping_add(1));
+        assert_eq!(browser.top(), Some(&refreshed));
+    }
+
+    #[test]
+    fn playlist_refresh_updates_hidden_visits_without_touching_the_visible_page() {
+        let (page, opened) = playlist_page(vec![track("old", "Original song")]);
+        let mut browser = Browser::default();
+        browser.show(page.clone());
+        browser.bind_cache_key(Some("playlist:VLPL-test".to_string()));
+        browser.show_from(page.clone(), Some(opened));
+        browser.show(Page::new(
+            "Unrelated album",
+            vec![redwax_ytm::Shelf::new(
+                "Songs",
+                vec![track("other", "Other song")],
+            )],
+        ));
+        browser.bind_cache_key(Some("album:unrelated".to_string()));
+        browser.set_filter(ItemKind::Tracks);
+        let visible_visit = browser.visits.last().unwrap().clone();
+        let revision = browser.revision();
+        let cursor = browser.cursor();
+        let scroll = browser.scroll();
+        let mut refreshed = page;
+        refreshed.shelves[0].items.push(track("saved", "Saved song"));
+
+        assert!(browser.refresh_playlist("PL-test", &refreshed));
+
+        assert_eq!(browser.visits[0].page, refreshed);
+        assert_eq!(browser.visits[1].page, refreshed);
+        assert_eq!(browser.visits.last(), Some(&visible_visit));
+        assert_eq!(browser.revision(), revision);
+        assert_eq!(browser.cursor(), cursor);
+        assert_eq!(browser.scroll(), scroll);
+        assert_eq!(browser.filter(), ItemKind::Tracks);
+        assert_eq!(browser.depth(), 3);
+        assert_eq!(browser.cache_key(), Some("album:unrelated"));
+    }
+
+    #[test]
+    fn an_equal_playlist_refresh_invalidates_optimistic_rollback_without_repainting() {
+        let (page, opened) = playlist_page(vec![track("first", "First"), track("second", "Second")]);
+        let mut browser = Browser::default();
+        browser.show_from(page, Some(opened));
+        let removal = browser.remove_selected_playlist_item().unwrap();
+        let confirmed = browser.top().unwrap().clone();
+        let revision = browser.revision();
+
+        assert!(!browser.refresh_playlist("PL-test", &confirmed));
+
+        assert_eq!(browser.revision(), revision);
+        assert!(!browser.restore_removal(removal));
+        assert_eq!(browser.top(), Some(&confirmed));
+    }
+
+    #[test]
+    fn an_incomplete_playlist_refresh_cannot_replace_a_complete_history_visit() {
+        let (page, opened) = playlist_page(vec![track("first", "First"), track("second", "Second")]);
+        let mut browser = Browser::default();
+        browser.show_from(page.clone(), Some(opened));
+        let before = browser.clone();
+        let partial = Page {
+            more: Some(redwax_ytm::Continuation {
+                browse_id: "VLPL-test".to_string(),
+                token: "next".to_string(),
+            }),
+            ..page
+        };
+
+        assert!(!browser.refresh_playlist("PL-test", &partial));
+        assert_eq!(browser, before);
     }
 
     #[test]

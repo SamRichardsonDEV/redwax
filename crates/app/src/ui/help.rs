@@ -9,7 +9,7 @@ use ratatui::widgets::Widget;
 use crate::commands::catalogue;
 use crate::theme::Theme;
 use crate::ui::popup::{self, Scroll};
-use crate::ui::{blank, span, width_of};
+use crate::ui::{span, width_of};
 
 #[cfg(test)]
 pub(crate) fn help(buffer: &mut Buffer, area: Rect, theme: &Theme, scroll: &mut Scroll) -> Rect {
@@ -90,7 +90,7 @@ pub(crate) fn searchable_help(
         .saturating_add(4)
         .min(u16::MAX as usize) as u16;
     let panel = popup::fit(&sizing_content, area, preferred_width);
-    blank(buffer, panel, Style::new().bg(theme.surface));
+    popup::frame(buffer, panel, theme.surface, theme.muted);
     let content_area = popup::inner(panel);
     if content_area.width == 0 || content_area.height == 0 {
         scroll.measure(0, 0);

@@ -21,9 +21,8 @@ pub fn tokyo_night() -> Palette {
 }
 
 pub const DEFAULT_ACCENT: Color = Color::Rgb(0x7a, 0xa2, 0xf7);
+pub const FOCUS_RED: Color = Color::Rgb(0xff, 0x55, 0x55);
 
-/// One accent, no borders, no radius. Surfaces are told apart by tone, or by
-/// seams alone when `transparent`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Theme {
     pub name: String,
@@ -48,6 +47,21 @@ pub struct Theme {
 }
 
 impl Theme {
+    pub fn playback_details(&self, focus_active: bool) -> Theme {
+        let mut theme = self.clone();
+        if focus_active {
+            theme.accent = FOCUS_RED;
+            theme.foreground = FOCUS_RED;
+            theme.muted = FOCUS_RED;
+            theme.dim = FOCUS_RED;
+            theme.gutter = FOCUS_RED;
+            theme.success = FOCUS_RED;
+            theme.warning = FOCUS_RED;
+            theme.error = FOCUS_RED;
+        }
+        theme
+    }
+
     /// The same theme with its one accent swapped, for art-driven colouring.
     pub fn with_accent(&self, accent: Color, theme_name: &str) -> Theme {
         Theme {

@@ -2,6 +2,8 @@
 
 A terminal YouTube Music player in Rust, with browser login, playlists,
 search, a queue, album art, synced lyrics and an eighteen-band equaliser.
+Focus mode collects fully played songs into a playlist. A mini player gives
+you compact playback controls in a terminal pane.
 Playback uses mpv. Premium accounts can request higher-quality audio when
 YouTube makes it available.
 
@@ -123,6 +125,10 @@ Inside redwax, press `tab` to focus the account box at the top right, then
 press `enter` to switch. Press `escape` to cancel. Playback continues while
 you switch accounts.
 
+The account box also shows login health. Background checks run every minute.
+**Login unconfirmed** warns of a failed check. **Login expired: Sign in**
+stays visible when browser recovery fails, even after you dismiss the picker.
+
 `redwax login` follows the account selected in your browser. Changing account
 on the website alone does not switch a running redwax. Account listing leaves
 your saved login unchanged. `--account` selects an identity explicitly.
@@ -183,6 +189,31 @@ Press `6` to preview and choose themes. redwax includes ten themes, can read
 custom palettes, and can follow Ghostty, foot or Omarchy colours.
 See [themes](docs/themes.md) for custom files and dotfile links.
 
+## Focus mode
+
+Press `7` to open Settings. Under **Focus mode**, choose a playlist you own
+in the **Playlist** row, then turn **Focus mode** on. Songs that finish
+without skips or seeks are added once if absent from the destination.
+Pausing does not disqualify a song. A red **FOCUS ON** label shows when
+collection is active in the full app and mini player.
+
+The destination is remembered, but Focus mode starts off on each launch.
+Use repeat off or repeat queue. Repeat track stops collection.
+See [Focus mode](docs/usage.md#focus-mode) for qualification rules and save status.
+
+## Mini player
+
+Run `redwax mini` in a terminal or split pane. It controls a running redwax
+session and waits for one to start when none is running.
+The compact view uses the same player bar, icons and colours as the full app.
+Closing this separate mini player leaves the full app playing.
+
+Use your terminal or multiplexer to choose its size and position.
+No particular terminal or multiplexer is required. In the full app, press `7`
+and choose **Mini player** to switch the current view to mini. Press `F`
+(Shift+F) to return to the full app in the same terminal.
+See [Mini player](docs/usage.md#mini-player) for controls and session behaviour.
+
 ## Troubleshooting
 
 ```sh
@@ -197,6 +228,15 @@ without song titles, account headers or stream URLs.
 
 YouTube can change its responses or playback requirements. Successful setup
 does not establish that every track or future YouTube change will work.
+
+## Feedback
+
+Tried redwax? [Share a short installation report](https://github.com/SamRichardsonDEV/redwax/issues/new?template=installation.yml)
+with your Linux distribution, terminal and what worked. A sentence is enough.
+
+For installation, sign-in or playback problems,
+[report a bug](https://github.com/SamRichardsonDEV/redwax/issues/new?template=bug.yml).
+Search existing issues first. Issues are for installation reports and bugs.
 
 ## Source layout
 
